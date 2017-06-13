@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.spinach._
 import org.apache.spark.sql.execution.datasources.spinach.utils.SpinachUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 
@@ -54,6 +55,10 @@ case class CreateIndex(
         (fileCatalog, s, SpinachFileFormat.SPINACH_DATA_FILE_CLASSNAME, id)
       case LogicalRelation(
       HadoopFsRelation(_, fileCatalog, _, s, _, _: ParquetFileFormat, _), _, id) =>
+        if (!sparkSession.conf.get(SQLConf.SPINACH_PARQUET_ENABLED)) {
+          throw new SpinachException(s"turn on ${
+            SQLConf.SPINACH_PARQUET_ENABLED.key} to allow index building on parquet files")
+        }
         (fileCatalog, s, SpinachFileFormat.PARQUET_DATA_FILE_CLASSNAME, id)
       case other =>
         throw new SpinachException(s"We don't support index building for ${other.simpleString}")
