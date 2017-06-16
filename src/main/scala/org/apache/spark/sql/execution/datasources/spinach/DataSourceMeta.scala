@@ -125,8 +125,10 @@ private[spinach] object FileMeta {
   }
 }
 
-private[spinach] class IndexMeta(var name: String = null, var indexType: IndexType = null)
-    extends Serializable {
+private[spinach] class IndexMeta(
+    var name: String = null,
+    var indexType: IndexType = null,
+    var time: String = null) extends Serializable {
   import DataSourceMeta._
   import IndexMeta._
 
@@ -172,6 +174,7 @@ private[spinach] class IndexMeta(var name: String = null, var indexType: IndexTy
 
   def write(out: FSDataOutputStream): Unit = {
     writeString(name, INDEX_META_NAME_LENGTH, out)
+    writeString(time, INDEX_META_TIME_LENGTH, out)
     val keyBits = BitSet.empty
     val dirBits = BitSet.empty
     indexType match {
