@@ -198,6 +198,7 @@ private[spinach] class IndexMeta(
     var readPos = in.getPos
     name = in.readUTF()
     readPos += INDEX_META_NAME_LENGTH
+    in.seek(readPos)
     time = in.readUTF()
     readPos += INDEX_META_TIME_LENGTH
 
