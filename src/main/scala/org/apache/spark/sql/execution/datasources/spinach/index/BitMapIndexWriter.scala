@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.spinach.index
 
 import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
+import org.apache.spark.sql.catalyst.expressions.FromUnsafeProjection
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -118,7 +120,7 @@ private[spinach] class BitMapIndexWriter(
           taskReturn = taskReturn ++: writeIndexFromRows(taskContext, iterator)
           writeNewFile = true
         } else {
-          val v = InternalRow.fromSeq(iterator.next().copy().toSeq(keySchema))
+          val v = genericProjector(iterator.next()).copy()
           statisticsManager.addSpinachKey(v)
           if (!tmpMap.contains(v)) {
             val list = new mutable.ListBuffer[Int]()
@@ -174,4 +176,5 @@ private[spinach] class BitMapIndexWriter(
         throw new SparkException("Task failed while writing rows", t)
     }
   }
+  @transient private lazy val genericProjector = FromUnsafeProjection(keySchema)
 }

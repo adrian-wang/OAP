@@ -161,10 +161,6 @@ private[spinach] class BTreeIndexWriter(
       // sort keys
       java.util.Arrays.sort(uniqueKeys, comparator)
       // build index file
-//      val indexFile = IndexUtils.indexFileFromDataFile(d, indexName)
-//      val fs = indexFile.getFileSystem(configuration)
-      // we are overwriting index files
-//      val fileOut = fs.create(indexFile, true)
       var i = 0
       var fileOffset = 0L
       val offsetMap = new java.util.HashMap[InternalRow, Long]()
