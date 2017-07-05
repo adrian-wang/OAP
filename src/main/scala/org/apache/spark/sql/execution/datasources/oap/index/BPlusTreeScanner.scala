@@ -49,8 +49,11 @@ private[oap] class BPlusTreeScanner(idxMeta: IndexMeta) extends IndexScanner(idx
     _init(root)
   }
 
-  def open(data: IndexFiberCacheData, keySchema: StructType, version: Int = 1): IndexNode = {
-    assert(version == 1, "Unsupported version of index data!")
+  def open(
+      data: IndexFiberCacheData,
+      keySchema: StructType,
+      version: Int = IndexFile.INDEX_VERSION): IndexNode = {
+    assert(version == IndexFile.INDEX_VERSION, "Unsupported version of index data!")
     UnsafeIndexNode(DataFiberCache(data.fiberData), data.rootOffset, data.dataEnd, keySchema)
   }
 

@@ -54,7 +54,7 @@ private[oap] case class BitMapScanner(idxMeta: IndexMeta) extends IndexScanner(i
     this
   }
 
-  def open(indexData: IndexFiberCacheData, version: Int = 1): Unit = {
+  def open(indexData: IndexFiberCacheData, version: Int = IndexFile.INDEX_VERSION): Unit = {
     val buffer: DataFiberCache = DataFiberCache(indexData.fiberData)
     val baseObj = buffer.fiberData.getBaseObject
     val baseOffset = buffer.fiberData.getBaseOffset + IndexFile.indexFileHeaderLength

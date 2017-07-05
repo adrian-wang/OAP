@@ -71,4 +71,5 @@ private[oap] case class IndexFile(file: Path) {
 
 private[oap] object IndexFile {
   val indexFileHeaderLength = 8
+  val INDEX_VERSION = 1
 }
