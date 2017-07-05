@@ -138,6 +138,7 @@ private[oap] class BitMapIndexWriter(
         kv._2.foreach(bs.set)
         hashMap.put(kv._1, bs)
       })
+      val header = writeHead(writer, 1)
       // serialize hashMap and get length
       val writeBuf = new ByteArrayOutputStream()
       val out = new ObjectOutputStream(writeBuf)
@@ -148,7 +149,7 @@ private[oap] class BitMapIndexWriter(
       IndexUtils.writeInt(writer, objLen)
       writer.write(writeBuf.toByteArray)
       out.close()
-      val indexEnd = 4 + objLen
+      val indexEnd = 4 + objLen + header
       var offset: Long = indexEnd
 
       statisticsManager.write(writer)

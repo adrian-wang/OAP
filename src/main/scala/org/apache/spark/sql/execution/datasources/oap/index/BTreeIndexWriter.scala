@@ -164,6 +164,7 @@ private[oap] class BTreeIndexWriter(
       var i = 0
       var fileOffset = 0L
       val offsetMap = new java.util.HashMap[InternalRow, Long]()
+      fileOffset += writeHead(writer, 1)
       // write data segment.
       while (i < partitionUniqueSize) {
         offsetMap.put(uniqueKeys(i), fileOffset)
