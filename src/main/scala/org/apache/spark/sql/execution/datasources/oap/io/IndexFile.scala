@@ -65,8 +65,7 @@ private[oap] case class IndexFile(file: Path) {
     val bytes = new Array[Byte](8)
     fin.read(bytes, 0, 8)
     fin.close()
-    bytes(6) << 8 + bytes(7)
-    1
+    (bytes(6) << 8) + bytes(7)
   }
 }
 
