@@ -23,7 +23,7 @@ After `mvn package` you will find `oap-<version>.jar` in `target/`. Update `spar
 > spark.sql("SELECT * FROM oap_test WHERE a = 1").show()
 > spark.sql("drop oindex index on oap_test")
 ```
-For a more detailed examples with performance compare, you can refer to [this page]()
+For a more detailed examples with performance compare, you can refer to [this page](https://github.com/Intel-bigdata/OAP/wiki/OAP-examples) for further instructions.
 ## Running Test
 
 To run all the tests, use
