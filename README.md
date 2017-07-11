@@ -9,7 +9,18 @@ mvn -DskipTests package
 ## Prerequisites
 You should have [Apache Spark](http://spark.apache.org/) of version 2.0.2 installed in your cluster. Refer to Apache Spark's [documents](http://spark.apache.org/docs/2.0.2/) for details.
 ## Use OAP with Spark
-After `mvn package` you will find `oap-<version>.jar` in `target/`. Update `spark.driver.extraClassPath` and `spark.executor.extraClassPath` to include this jar file, and you can use OAP from `bin/spark-sql`, `bin/spark-shell` or `sbin/start-thriftserver` as you usually do.
+1. Build OAP, `mvn -DskipTests package` and find `oap-<version>.jar` in `target/`
+2. Deploy `oap-<version>.jar` to master machine.
+3. Put below configurations to _$SPARK_HOME/conf/spark-defaults.conf_
+```
+spark.files                      file:///path/to/oap-dir/oap-<version>.jar
+spark.executor.extraClassPath      ./oap-<version>.jar
+spark.driver.extraClassPath        /path/to/oap-dir/oap-0.2.0.jar
+```
+4. Run spark by `bin/spark-sql`, `bin/spark-shell`, `sbin/start-thriftserver` or `bin/pyspark` and try our examples
+
+**NOTE**: For spark standalone mode, you have to put `oap-<version>.jar` to both driver and executor since `spark.files` is not working. Also don't forget to update `extraClassPath`.
+
 ## Example
 ```
 ./bin/spark-shell
