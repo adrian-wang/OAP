@@ -114,6 +114,9 @@ case class CreateIndex(
         case BitMapIndexType =>
           val entries = indexColumns.map(col => s.map(_.name).toIndexedSeq.indexOf(col.columnName))
           metaBuilder.addIndexMeta(new IndexMeta(indexName, time, BitMapIndex(entries)))
+        case PermutermIndexType =>
+          val entries = indexColumns.map(col => s.map(_.name).toIndexedSeq.indexOf(col.columnName))
+          metaBuilder.addIndexMeta(new IndexMeta(indexName, time, TrieIndex(entries)))
         case _ =>
           sys.error(s"Not supported index type $indexType")
       }
@@ -323,13 +326,16 @@ case class RefreshIndex(
     })
 
     val buildrst = indices.map(i => {
-      var indexType : AnyIndexType = BTreeIndexType
+      var indexType: AnyIndexType = BTreeIndexType
 
       val indexColumns = i.indexType match {
         case BTreeIndex(entries) =>
           entries.map(e => IndexColumn(s(e.ordinal).name, e.dir == Ascending))
         case BitMapIndex(entries) =>
           indexType = BitMapIndexType
+          entries.map(e => IndexColumn(s(e).name))
+        case TrieIndex(entries) =>
+          indexType = PermutermIndexType
           entries.map(e => IndexColumn(s(e).name))
         case it => sys.error(s"Not implemented index type $it")
       }
@@ -457,6 +463,9 @@ case class OapShowIndex(relation: LogicalPlan, relationName: String)
       case BitMapIndex(entries) =>
         entries.zipWithIndex.map(ei =>
           Row(relationName, i.name, ei._2, schema(ei._1).name, "A", "BITMAP"))
+      case TrieIndex(entries) =>
+        entries.zipWithIndex.map(ei =>
+          Row(relationName, i.name, ei._2, schema(ei._1).name, "A", "TRIE"))
       case t => sys.error(s"not support index type $t for index ${i.name}")
     })
   }

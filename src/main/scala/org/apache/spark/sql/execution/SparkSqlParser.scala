@@ -1401,7 +1401,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *
    * {{{
    *   CREATE OINDEX [IF NOT EXISTS] indexName ON tableName (col1 [ASC | DESC], col2, ...)
-   *   [USING (BTREE | BLOOM | BITMAP)] [PARTITION (partcol1=val1, partcol2=val2 ...)]
+   *   [USING (BTREE | TRIE | BITMAP)] [PARTITION (partcol1=val1, partcol2=val2 ...)]
    * }}}
    */
   override def visitOapCreateIndex(ctx: OapCreateIndexContext): LogicalPlan =
@@ -1440,6 +1440,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     withOrigin(ctx) {
       if (ctx.BTREE != null) {
         BTreeIndexType
+      } else if (ctx.TRIE != null) {
+        PermutermIndexType
       } else {
         BitMapIndexType
       }

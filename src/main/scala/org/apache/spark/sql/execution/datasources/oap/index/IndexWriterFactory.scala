@@ -36,6 +36,8 @@ private[index] object IndexWriterFactory {
         new BTreeIndexWriter(relation, job, indexColumns, keySchema, indexName, time, isAppend)
       case BitMapIndexType =>
         new BitMapIndexWriter(relation, job, indexColumns, keySchema, indexName, time, isAppend)
+      case PermutermIndexType =>
+        new PermutermWriter(relation, job, indexColumns, keySchema, indexName, time, isAppend)
     }
   }
 }

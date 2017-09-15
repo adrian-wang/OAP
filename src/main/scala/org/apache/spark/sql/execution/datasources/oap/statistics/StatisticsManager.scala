@@ -194,7 +194,8 @@ object StatisticsManager {
       BTreeIndexType -> Array(MinMaxStatisticsType, SampleBasedStatisticsType,
         BloomFilterStatisticsType, PartByValueStatisticsType),
       BitMapIndexType -> Array(MinMaxStatisticsType, SampleBasedStatisticsType,
-        BloomFilterStatisticsType, PartByValueStatisticsType))
+        BloomFilterStatisticsType, PartByValueStatisticsType),
+      PermutermIndexType -> Array())
 
   /**
    * Using a static object to store parameter is not a good idea, some reasons:

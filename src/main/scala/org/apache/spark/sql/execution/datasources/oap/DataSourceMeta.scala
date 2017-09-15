@@ -81,6 +81,12 @@ private[oap] case class BitMapIndex(entries: Seq[Int] = Nil) extends IndexType {
   override def toString: String = "COLUMN(" + entries.mkString(", ") + ") BITMAP"
 }
 
+private[oap] case class TrieIndex(entries: Seq[Int] = Nil) extends IndexType {
+  def appendEntry(entry: Int): TrieIndex = TrieIndex(entries :+ entry)
+
+  override def toString: String = "COLUMN(" + entries.mkString(", ") + ") TRIE"
+}
+
 private[oap] case class HashIndex(entries: Seq[Int] = Nil) extends IndexType {
   def appendEntry(entry: Int): HashIndex = HashIndex(entries :+ entry)
 

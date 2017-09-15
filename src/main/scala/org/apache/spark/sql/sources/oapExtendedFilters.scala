@@ -15,21 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.oap.index
+package org.apache.spark.sql.sources
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// This file defines all the filters that we can push down to the data sources only with OAP.
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
-sealed abstract class AnyIndexType {
-  def toString: String
-}
-
-case object BTreeIndexType extends AnyIndexType {
-  override def toString: String = "BTREE"
-}
-
-case object BitMapIndexType extends AnyIndexType {
-  override def toString: String = "BITMAP"
-}
-
-case object PermutermIndexType extends AnyIndexType {
-  override def toString: String = "PERMUTERM"
-}
+/**
+ * A filter that evaluates to `true` iff the attribute evaluates to
+ * a string that contains the string `value`.
+ *
+ * @since oap-0.3
+ */
+case class StringLike(attribute: String, value: String) extends Filter

@@ -172,6 +172,7 @@ indexCol
 indexType
     : BTREE
     | BITMAP
+    | TRIE
     ;
 
 unsupportedHiveNativeCommands
@@ -928,8 +929,8 @@ CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 
 SINDEX: 'SINDEX' | 'OINDEX';
 BTREE: 'BTREE';
-BLOOM: 'BLOOM';
 BITMAP: 'BITMAP';
+TRIE: 'TRIE';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
