@@ -161,7 +161,6 @@ private[oap] class PermutermWriter(
 
       statisticsManager.write(writer)
 
-      assert(uniqueKeysList.size == 1)
       IndexUtils.writeInt(writer, dataEnd)
       IndexUtils.writeInt(writer, treeLength + dataEnd)
 

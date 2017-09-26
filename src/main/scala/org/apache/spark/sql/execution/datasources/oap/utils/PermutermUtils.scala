@@ -55,13 +55,13 @@ private[oap] object PermutermUtils extends Logging {
       bytes: Seq[Byte], offset: Int, root: InMemoryTrie): Unit = {
     bytes match {
       case Nil => root.setPointer(offset)
-      case letter :: Nil =>
+      case letter +: Nil =>
         assert(root.children.forall(c => c.nodeKey != letter || !c.canTerminate))
         root.children.find(_.nodeKey == letter) match {
           case Some(tn: InMemoryTrie) => tn.setPointer(offset)
           case _ => root.addChild(InMemoryTrie(letter, offset))
         }
-      case letter :: tail =>
+      case letter +: tail =>
         root.children.find(_.nodeKey == letter) match {
           case Some(tn: InMemoryTrie) =>
             addArrayByteToTrie(tail, offset, tn)
