@@ -203,7 +203,7 @@ private[oap] object ScannerBuilder extends Logging {
     )
     val filtersForString = filters.map(optimizeStringConditions(_, ic)).filter(_._2 != null)
 
-    if (intervalMap != null) {
+    if (intervalMap != null && intervalMap.nonEmpty) {
       intervalMap.foreach(intervals =>
         logDebug("\t" + intervals._1 + ": " + intervals._2.mkString(" - ")))
 

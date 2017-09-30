@@ -162,7 +162,7 @@ private[oap] class PermutermWriter(
       statisticsManager.write(writer)
 
       IndexUtils.writeInt(writer, dataEnd)
-      IndexUtils.writeInt(writer, treeLength + dataEnd)
+      IndexUtils.writeInt(writer, treeLength)
 
       taskReturn :+ IndexBuildResult(filename, cnt, "", new Path(filename).getParent.toString)
     }

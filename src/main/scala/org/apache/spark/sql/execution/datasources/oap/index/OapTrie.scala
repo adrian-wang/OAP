@@ -44,16 +44,18 @@ private[oap] trait TrieNode {
  */
 private[oap] case class UnsafeTrie(
     buffer: ChunkedByteBuffer,
-    offset: Long) extends TrieNode with UnsafeIndexTree {
+    offset: Long,
+    dataEnd: Long) extends TrieNode with UnsafeIndexTree {
   def nodeKey: Byte = Platform.getShort(baseObj, baseOffset + offset).toByte
   def childCount: Int = Platform.getShort(baseObj, baseOffset + offset + 2)
   def canTerminate: Boolean = rowIdsPointer >= 0
   def rowIdsPointer: Int = Platform.getInt(baseObj, baseOffset + offset + 4)
   def children: Seq[TrieNode] = (0 to childCount).map(childAt)
   def childAt(idx: Int): TrieNode =
-    UnsafeTrie(buffer, Platform.getInt(baseObj, baseOffset + offset + 8 + idx * 4))
+    UnsafeTrie(buffer, Platform.getInt(baseObj, baseOffset + offset + 8 + idx * 4), dataEnd)
   def allPointers: Seq[Int] = rowIdsPointer +: children.flatMap(_.allPointers)
   override def length: Int = 8 + 4 * childCount
+  override val baseOffset = super.baseOffset + dataEnd
 }
 
 private[oap] case class UnsafeIds(buffer: ChunkedByteBuffer, offset: Long) extends UnsafeIndexTree {

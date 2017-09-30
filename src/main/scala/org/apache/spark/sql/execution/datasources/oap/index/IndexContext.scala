@@ -174,6 +174,10 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
     // TODO make sure available
     scanner = new TrieScanner(availableIndexes.head._2)
     scanner.pattern = pattern
+    logDebug("Index Scanner Intervals: " + scanner.intervalArray.mkString(", "))
+    getBestIndexer(0)
+    val keySchema = new StructType().add(meta.schema(1))
+    scanner.withKeySchema(keySchema)
   }
 
   def buildScanner(
