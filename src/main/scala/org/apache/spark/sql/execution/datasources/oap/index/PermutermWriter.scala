@@ -154,7 +154,8 @@ private[oap] class PermutermWriter(
       import scala.collection.JavaConverters._
       uniqueKeysList.addAll(uniqueKeys.toSeq.asJava)
 
-      val trie = PermutermUtils.generatePermuterm(uniqueKeysList, offsetMap)
+      val trie = InMemoryTrie()
+      val trieSize = PermutermUtils.generatePermuterm(uniqueKeysList, offsetMap, trie)
       val treeMap = Map[TrieNode, Int]()
       val treeLength = writeTrie(writer, trie, treeMap, 0)
       fileOffset += treeLength

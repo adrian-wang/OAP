@@ -25,41 +25,48 @@ import org.apache.spark.unsafe.types.UTF8String
 private[oap] object PermutermUtils extends Logging {
   def generatePermuterm(
       uniqueList: java.util.LinkedList[InternalRow],
-      offsetMap: java.util.HashMap[InternalRow, Int]): InMemoryTrie = {
-    val root = InMemoryTrie()
+      offsetMap: java.util.HashMap[InternalRow, Int],
+      root: InMemoryTrie = InMemoryTrie()): Long = {
     val it = uniqueList.iterator()
+    var count = 0L
     while (it.hasNext) {
       val row = it.next()
-      addWordToPermutermTree(row, root, offsetMap)
+      count += addWordToPermutermTree(row, root, offsetMap)
     }
-    root
+    count
   }
 
   private def addWordToPermutermTree(
       row: InternalRow,
       root: InMemoryTrie,
-      offsetMap: java.util.HashMap[InternalRow, Int]): Unit = {
+      offsetMap: java.util.HashMap[InternalRow, Int]): Int = {
     val utf8String = row.getUTF8String(0)
     val bytes = utf8String.getBytes
     assert(offsetMap.containsKey(row))
     val endMark = UTF8String.fromString("$").getBytes
     val offset = offsetMap.get(row)
     // including "$123" and "123$" and "23$1" and "3$12"
-    (0 to bytes.length).foreach(i => {
+    (0 to bytes.length).map(i => {
       val token = bytes.slice(i, bytes.length) ++ endMark ++ bytes.slice(0, i)
       addArrayByteToTrie(token, offset, root)
-    })
+    }).sum
   }
 
   private def addArrayByteToTrie(
-      bytes: Seq[Byte], offset: Int, root: InMemoryTrie): Unit = {
+      bytes: Seq[Byte], offset: Int, root: InMemoryTrie): Int = {
     bytes match {
-      case Nil => root.setPointer(offset)
+      case Nil =>
+        root.setPointer(offset)
+        0
       case letter +: Nil =>
         assert(root.children.forall(c => c.nodeKey != letter || !c.canTerminate))
         root.children.find(_.nodeKey == letter) match {
-          case Some(tn: InMemoryTrie) => tn.setPointer(offset)
-          case _ => root.addChild(InMemoryTrie(letter, offset))
+          case Some(tn: InMemoryTrie) =>
+            tn.setPointer(offset)
+            0
+          case _ =>
+            root.addChild(InMemoryTrie(letter, offset))
+            1
         }
       case letter +: tail =>
         root.children.find(_.nodeKey == letter) match {
@@ -68,7 +75,7 @@ private[oap] object PermutermUtils extends Logging {
           case _ =>
             val parent = InMemoryTrie(letter)
             root.addChild(parent)
-            addArrayByteToTrie(tail, offset, parent)
+            addArrayByteToTrie(tail, offset, parent) + 1
         }
     }
   }
