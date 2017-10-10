@@ -85,4 +85,7 @@ private[oap] case class InMemoryTrie(
   }
   def canTerminate: Boolean = rowIdsPointer >= 0
   def childCount: Int = innerChildren.size
+  // for debug
+  override def toString: String =
+    s"[IMT($nodeKey,$rowIdsPointer) ${children.mkString(" ")}]"
 }
