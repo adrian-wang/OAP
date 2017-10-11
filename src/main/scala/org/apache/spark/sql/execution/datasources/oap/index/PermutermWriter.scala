@@ -156,12 +156,13 @@ private[oap] class PermutermWriter(
 
       val trie = InMemoryTrie()
       val trieSize = PermutermUtils.generatePermuterm(uniqueKeysList, offsetMap, trie)
-      val treeMap = Map[TrieNode, Int]()
+      val treeMap = new java.util.HashMap[TrieNode, Int]()
       val treeLength = writeTrie(writer, trie, treeMap, 0)
       fileOffset += treeLength
 
       statisticsManager.write(writer)
 
+      IndexUtils.writeInt(writer, treeMap.get(trie))
       IndexUtils.writeInt(writer, dataEnd)
       IndexUtils.writeInt(writer, treeLength)
 
@@ -184,14 +185,14 @@ private[oap] class PermutermWriter(
 
   private def writeTrie(
       writer: IndexOutputWriter, trieNode: TrieNode,
-      treeMap: Map[TrieNode, Int], treeOffset: Int): Int = {
-    var base = treeOffset
-    treeMap.updated(trieNode, treeOffset)
-    trieNode.children.foreach(base += writeTrie(writer, _, treeMap, base))
+      treeMap: java.util.HashMap[TrieNode, Int], treeOffset: Int): Int = {
+    var length = 0
+    trieNode.children.foreach(length += writeTrie(writer, _, treeMap, treeOffset + length))
+    treeMap.put(trieNode, treeOffset + length)
     IndexUtils.writeInt(writer, trieNode.nodeKey << 16 + trieNode.childCount)
     IndexUtils.writeInt(writer, trieNode.rowIdsPointer)
-    base += 8
-    trieNode.children.foreach(c => IndexUtils.writeInt(writer, treeMap.getOrElse(c, -1)))
-    base + trieNode.childCount * 4
+    length += 8
+    trieNode.children.foreach(c => IndexUtils.writeInt(writer, treeMap.get(c)))
+    length + trieNode.childCount * 4
   }
 }

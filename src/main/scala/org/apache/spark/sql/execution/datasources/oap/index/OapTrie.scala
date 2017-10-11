@@ -31,6 +31,16 @@ private[oap] trait TrieNode {
   def canTerminate: Boolean
   def rowIdsPointer: Int
   def allPointers: Seq[Int]
+  // for debug
+  override def toString: String = {
+    def disp(key: Byte): String =
+      if (key >= 32 && key <= 126) key.toChar.toString else "\\x" + key.toLong.toHexString
+    if (childCount > 0) {
+      s"[Trie(${disp(nodeKey)},$rowIdsPointer) ${children.mkString(" ")}]"
+    } else {
+      s"Trie(${disp(nodeKey)},$rowIdsPointer)"
+    }
+  }
 }
 
 /**
@@ -66,6 +76,9 @@ private[oap] case class UnsafeIds(buffer: ChunkedByteBuffer, offset: Long) exten
   }
 }
 
+object InMemoryTrie {
+  var cnt: Int = 0
+}
 private[oap] case class InMemoryTrie(
     nodeKey: Byte = 0,
     var rowIdsPointer: Int = -1) extends TrieNode {
@@ -85,7 +98,9 @@ private[oap] case class InMemoryTrie(
   }
   def canTerminate: Boolean = rowIdsPointer >= 0
   def childCount: Int = innerChildren.size
-  // for debug
-  override def toString: String =
-    s"[IMT($nodeKey,$rowIdsPointer) ${children.mkString(" ")}]"
+  val id: Int = {
+    InMemoryTrie.cnt = InMemoryTrie.cnt + 1
+    InMemoryTrie.cnt
+  }
+  override def hashCode(): Int = id
 }

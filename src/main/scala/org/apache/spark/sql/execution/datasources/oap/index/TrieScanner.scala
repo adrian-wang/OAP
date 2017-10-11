@@ -86,7 +86,8 @@ private[oap] case class TrieScanner(idxMeta: IndexMeta) extends IndexScanner(idx
       case _ => (data.toArray, Platform.BYTE_ARRAY_OFFSET)
     }
     val dataEnd = Platform.getInt(baseObject, baseOffset + data.size - 8)
-    val rootOffset = Platform.getInt(baseObject, baseOffset + data.size - 4)
+    val length = Platform.getInt(baseObject, baseOffset + data.size - 4)
+    val rootOffset = Platform.getInt(baseObject, baseOffset + data.size - 12)
     UnsafeTrie(data, rootOffset, dataEnd)
   }
 
