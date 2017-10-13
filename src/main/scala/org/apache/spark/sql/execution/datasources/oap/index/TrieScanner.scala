@@ -109,7 +109,7 @@ private[oap] case class TrieScanner(idxMeta: IndexMeta) extends IndexScanner(idx
     if (remain == 0) {
       0
     } else {
-      val ret = readingUnsafeIds(currentCount - remain - 1)
+      val ret = readingUnsafeIds(currentCount - remain)
       remain -= 1
       ret
     }

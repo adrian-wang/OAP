@@ -56,11 +56,14 @@ private[oap] case class UnsafeTrie(
     buffer: ChunkedByteBuffer,
     offset: Long,
     dataEnd: Long) extends TrieNode with UnsafeIndexTree {
-  def nodeKey: Byte = Platform.getShort(baseObj, baseOffset + offset).toByte
-  def childCount: Int = Platform.getShort(baseObj, baseOffset + offset + 2)
+  private lazy val firstInt: Int = Platform.getInt(baseObj, baseOffset + offset)
+  // def nodeKey: Byte = Platform.getShort(baseObj, baseOffset + offset).toByte
+  def nodeKey: Byte = (firstInt >> 16).toByte
+  // def childCount: Int = Platform.getShort(baseObj, baseOffset + offset + 2)
+  def childCount: Int = firstInt & 0xFFFF
   def canTerminate: Boolean = rowIdsPointer >= 0
   def rowIdsPointer: Int = Platform.getInt(baseObj, baseOffset + offset + 4)
-  def children: Seq[TrieNode] = (0 to childCount).map(childAt)
+  def children: Seq[TrieNode] = (0 until childCount).map(childAt)
   def childAt(idx: Int): TrieNode =
     UnsafeTrie(buffer, Platform.getInt(baseObj, baseOffset + offset + 8 + idx * 4), dataEnd)
   def allPointers: Seq[Int] = rowIdsPointer +: children.flatMap(_.allPointers)
@@ -71,14 +74,11 @@ private[oap] case class UnsafeTrie(
 private[oap] case class UnsafeIds(buffer: ChunkedByteBuffer, offset: Long) extends UnsafeIndexTree {
   def count: Int = Platform.getInt(baseObj, baseOffset + offset)
   def apply(id: Int): Int = {
-    assert(id < count && id > 0)
+    assert(id < count && id >= 0, id)
     Platform.getInt(baseObj, baseOffset + offset + 4 * id + 4)
   }
 }
 
-object InMemoryTrie {
-  var cnt: Int = 0
-}
 private[oap] case class InMemoryTrie(
     nodeKey: Byte = 0,
     var rowIdsPointer: Int = -1) extends TrieNode {
@@ -98,9 +98,4 @@ private[oap] case class InMemoryTrie(
   }
   def canTerminate: Boolean = rowIdsPointer >= 0
   def childCount: Int = innerChildren.size
-  val id: Int = {
-    InMemoryTrie.cnt = InMemoryTrie.cnt + 1
-    InMemoryTrie.cnt
-  }
-  override def hashCode(): Int = id
 }

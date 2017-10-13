@@ -76,7 +76,7 @@ class OapIndexQuerySuite extends QueryTest with SharedSQLContext with BeforeAndA
 
   test("permuterm index") {
     val data: Seq[(Int, String)] =
-      scala.util.Random.shuffle(1 to 20).map(i => (i, s"test$i")).toSeq
+      scala.util.Random.shuffle(1 to 20).map(i => (i, s"test$i")).seq.toSeq
     data.toDF("key", "value").createOrReplaceTempView("t")
     sql("insert overwrite table oap_test_1 select * from t")
     sql("create oindex index2 on oap_test_1 (b) using trie")

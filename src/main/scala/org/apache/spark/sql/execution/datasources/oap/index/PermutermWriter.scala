@@ -137,16 +137,15 @@ private[oap] class PermutermWriter(
         // row count for same key
         IndexUtils.writeInt(writer, rowIds.size())
         // 4 -> value1, stores rowIds count.
-        fileOffset = fileOffset + 4
+        fileOffset += 4
         var idIter = 0
         while (idIter < rowIds.size()) {
           // TODO wrap this to define use Long or Int
           IndexUtils.writeInt(writer, rowIds.get(idIter))
-          // 8 -> value2, stores a row id
-          fileOffset = fileOffset + 8
-          idIter = idIter + 1
+          fileOffset += 4
+          idIter += 1
         }
-        i = i + 1
+        i += 1
       }
       val dataEnd = fileOffset
       // write index segment.
@@ -156,13 +155,13 @@ private[oap] class PermutermWriter(
 
       val trie = InMemoryTrie()
       val trieSize = PermutermUtils.generatePermuterm(uniqueKeysList, offsetMap, trie)
-      val treeMap = new java.util.HashMap[TrieNode, Int]()
+      val treeMap = new java.util.HashMap[TrieNode, java.util.Stack[Int]]()
       val treeLength = writeTrie(writer, trie, treeMap, 0)
       fileOffset += treeLength
 
       statisticsManager.write(writer)
 
-      IndexUtils.writeInt(writer, treeMap.get(trie))
+      IndexUtils.writeInt(writer, treeMap.get(trie).pop())
       IndexUtils.writeInt(writer, dataEnd)
       IndexUtils.writeInt(writer, treeLength)
 
@@ -185,14 +184,17 @@ private[oap] class PermutermWriter(
 
   private def writeTrie(
       writer: IndexOutputWriter, trieNode: TrieNode,
-      treeMap: java.util.HashMap[TrieNode, Int], treeOffset: Int): Int = {
+      treeMap: java.util.HashMap[TrieNode, java.util.Stack[Int]], treeOffset: Int): Int = {
     var length = 0
     trieNode.children.foreach(length += writeTrie(writer, _, treeMap, treeOffset + length))
-    treeMap.put(trieNode, treeOffset + length)
-    IndexUtils.writeInt(writer, trieNode.nodeKey << 16 + trieNode.childCount)
+    if (!treeMap.containsKey(trieNode)) {
+      treeMap.put(trieNode, new java.util.Stack[Int])
+    }
+    treeMap.get(trieNode).push(treeOffset + length)
+    IndexUtils.writeInt(writer, (trieNode.nodeKey << 16) + trieNode.childCount)
     IndexUtils.writeInt(writer, trieNode.rowIdsPointer)
     length += 8
-    trieNode.children.foreach(c => IndexUtils.writeInt(writer, treeMap.get(c)))
+    trieNode.children.foreach(c => IndexUtils.writeInt(writer, treeMap.get(c).pop()))
     length + trieNode.childCount * 4
   }
 }
