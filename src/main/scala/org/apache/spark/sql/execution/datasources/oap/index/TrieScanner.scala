@@ -87,8 +87,9 @@ private[oap] case class TrieScanner(idxMeta: IndexMeta) extends IndexScanner(idx
     }
     val dataEnd = Platform.getInt(baseObject, baseOffset + data.size - 8)
     val length = Platform.getInt(baseObject, baseOffset + data.size - 4)
-    val rootOffset = Platform.getInt(baseObject, baseOffset + data.size - 12)
-    UnsafeTrie(data, rootOffset, dataEnd)
+    val rootPage = Platform.getInt(baseObject, baseOffset + data.size - 12)
+    val rootOffset = Platform.getInt(baseObject, baseOffset + data.size - 16)
+    UnsafeTrie(data, rootPage, rootOffset, dataEnd)
   }
 
   override def toString: String = "TrieScanner"
