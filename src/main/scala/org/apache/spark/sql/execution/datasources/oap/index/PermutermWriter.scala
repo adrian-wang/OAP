@@ -202,6 +202,6 @@ private[oap] class PermutermWriter(
       IndexUtils.writeInt(writer, pos.offset)
       IndexUtils.writeInt(writer, pos.page)
     })
-    length + trieNode.childCount * 4
+    length + trieNode.childCount * 8
   }
 }

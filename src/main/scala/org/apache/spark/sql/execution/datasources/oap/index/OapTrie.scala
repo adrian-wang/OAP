@@ -50,13 +50,14 @@ private[oap] trait TrieNode {
  * -1 if there's no options. Then [child count] * [child offset of file(int, 4 bytes)] is written.
  * Note those children should be ordered in ascii ascending order to enable bisection method.
  * @param buffer the total area of data
- * @param offset offset of this node in the file stored
+ * @param intOffset offset of this node in the file stored
  */
 private[oap] case class UnsafeTrie(
     buffer: ChunkedByteBuffer,
     page: Int,
-    offset: Int,
+    intOffset: Int,
     dataEnd: Long) extends TrieNode with UnsafeIndexTree {
+  def offset: Long = intOffset.toLong
   private lazy val firstInt: Int = Platform.getInt(baseObj, baseOffset + offset)
   // def nodeKey: Byte = Platform.getShort(baseObj, baseOffset + offset).toByte
   def nodeKey: Byte = (firstInt >> 16).toByte
