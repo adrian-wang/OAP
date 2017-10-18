@@ -70,7 +70,11 @@ private[oap] case class UnsafeTrie(
     UnsafeTrie(buffer,
       Platform.getInt(baseObj, baseOffset + offset + 8 + idx * 8 + 4),
       Platform.getInt(baseObj, baseOffset + offset + 8 + idx * 8), dataEnd)
-  def allPointers: Seq[Int] = rowIdsPointer +: children.flatMap(_.allPointers)
+  def allPointers: Seq[Int] = if (canTerminate) {
+    rowIdsPointer +: children.flatMap(_.allPointers)
+  } else {
+    children.flatMap(_.allPointers)
+  }
   override def length: Int = 8 + 8 * childCount
   override val baseOffset = super.baseOffset + dataEnd
 }
