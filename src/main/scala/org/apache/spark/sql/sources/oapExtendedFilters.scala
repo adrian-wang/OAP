@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.annotation.InterfaceStability
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the filters that we can push down to the data sources only with OAP.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -27,4 +29,7 @@ package org.apache.spark.sql.sources
  *
  * @since oap-0.3
  */
-case class StringLike(attribute: String, value: String) extends Filter
+@InterfaceStability.Stable
+case class StringLike(attribute: String, value: String) extends Filter {
+  override def references: Array[String] = Array(attribute)
+}

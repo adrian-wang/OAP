@@ -33,23 +33,20 @@ import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
 private[oap] class PermutermWriter(
-    relation: WriteIndexRelation,
-    job: Job,
     indexColumns: Array[IndexColumn],
     keySchema: StructType,
     indexName: String,
     time: String,
-    isAppend: Boolean) extends IndexWriter(relation, job, isAppend) {
+    isAppend: Boolean) extends IndexWriter {
 
   assert(keySchema.length == 1, "not supported building permuterm index on more than 1 column")
   assert(keySchema.head.dataType == StringType, "only support Permuterm index on string column")
 
-  override def writeIndexFromRows(
-      taskContext: TaskContext, iterator: Iterator[InternalRow]): Seq[IndexBuildResult] = {
+  override def writeIndexFromRows(description: WriteJobDescription,
+      writer: IndexOutputWriter, iterator: Iterator[InternalRow]): Seq[IndexBuildResult] = {
     var taskReturn: Seq[IndexBuildResult] = Nil
     var writeNewFile = false
-    executorSideSetup(taskContext)
-    val configuration = taskAttemptContext.getConfiguration
+    val configuration = description.serializableHadoopConf.value
     // to get input filename
     if (!iterator.hasNext) return Nil
     // configuration.set(DATASOURCE_OUTPUTPATH, outputPath)
@@ -69,39 +66,7 @@ private[oap] class PermutermWriter(
       if (skip) return Nil
     }
     val filename = InputFileNameHolder.getInputFileName().toString
-    configuration.set(IndexWriter.INPUT_FILE_NAME, filename)
-    configuration.set(IndexWriter.INDEX_NAME, indexName)
-    configuration.set(IndexWriter.INDEX_TIME, time)
-    // TODO deal with partition
-    // configuration.set(FileOutputFormat.OUTDIR, getWorkPath)
-    var writer = newIndexOutputWriter()
-
-    def commitTask(): Seq[WriteResult] = {
-      try {
-        var writeResults: Seq[WriteResult] = Nil
-        if (writer != null) {
-          writeResults = writeResults :+ writer.close()
-          writer = null
-        }
-        super.commitTask()
-        writeResults
-      } catch {
-        case cause: Throwable =>
-          // This exception will be handled in `InsertIntoHadoopFsRelation.insert$writeRows`, and
-          // will cause `abortTask()` to be invoked.
-          throw new RuntimeException("Failed to commit task", cause)
-      }
-    }
-
-    def abortTask(): Unit = {
-      try {
-        if (writer != null) {
-          writer.close()
-        }
-      } finally {
-        super.abortTask()
-      }
-    }
+    writer.initIndexInfo(filename, indexName, time)
 
     def writeTask(): Seq[IndexBuildResult] = {
       val statisticsManager = new StatisticsManager
@@ -112,7 +77,7 @@ private[oap] class PermutermWriter(
       while (iterator.hasNext && !writeNewFile) {
         val fname = InputFileNameHolder.getInputFileName().toString
         if (fname != filename) {
-          taskReturn = taskReturn ++: writeIndexFromRows(taskContext, iterator)
+          taskReturn = taskReturn ++: writeIndexFromRows(description, writer.copy(), iterator)
           writeNewFile = true
         } else {
           val v = genericProjector(iterator.next()).copy()
@@ -167,20 +132,13 @@ private[oap] class PermutermWriter(
       IndexUtils.writeInt(writer, dataEnd)
       IndexUtils.writeInt(writer, treeLength)
 
-      taskReturn :+ IndexBuildResult(filename, cnt, "", new Path(filename).getParent.toString)
+      // avoid fd leak
+      writer.close()
+      taskReturn :+ IndexBuildResult(
+        new Path(filename).getName, cnt, "", new Path(filename).getParent.toString)
     }
 
-    // If anything below fails, we should abort the task.
-    try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks {
-        val res = writeTask()
-        commitTask()
-        res
-      }(catchBlock = abortTask())
-    } catch {
-      case t: Throwable =>
-        throw new SparkException("Task failed while writing rows", t)
-    }
+    writeTask()
   }
   @transient private lazy val genericProjector = FromUnsafeProjection(keySchema)
 
