@@ -19,7 +19,12 @@ package org.apache.spark.sql.execution.datasources.oap.utils
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 
 class PermutermUtilsSuite extends SparkFunSuite with Logging {
-
+  test("add byte array to trie") {
+    val uniqueList = new java.util.LinkedList[InternalRow]()
+    val offsetMap = new java.util.HashMap[InternalRow, Int]()
+    assert(PermutermUtils.generatePermuterm(uniqueList, offsetMap).toString == "")
+  }
 }
