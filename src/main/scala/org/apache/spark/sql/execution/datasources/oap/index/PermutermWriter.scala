@@ -120,9 +120,18 @@ private[oap] class PermutermWriter(
 
       val trie = InMemoryTrie()
       val trieSize = PermutermUtils.generatePermuterm(uniqueKeysList, offsetMap, trie)
+      // TODO split page
+      val pages: Seq[Int] = if (trieSize > 100000) {
+        Seq(100000, 100000)
+      } else {
+        Seq(trieSize.toInt)
+      }
       val treeMap = new java.util.HashMap[TrieNode, java.util.Stack[TriePointer]]()
       val treeLength = writeTrie(writer, trie, treeMap, 0)
       fileOffset += treeLength
+      // scalastyle:off
+      println(treeLength, dataEnd, uniqueKeys.size, trieSize)
+      // scalastyle:on
 
       statisticsManager.write(writer)
 
