@@ -117,7 +117,8 @@ case class CreateIndex(
             schema.map(_.name).toIndexedSeq.indexOf(col.columnName))
           metaBuilder.addIndexMeta(new IndexMeta(indexName, time, BitMapIndex(entries)))
         case PermutermIndexType =>
-          val entries = indexColumns.map(col => s.map(_.name).toIndexedSeq.indexOf(col.columnName))
+          val entries = indexColumns.map(col =>
+            schema.map(_.name).toIndexedSeq.indexOf(col.columnName))
           metaBuilder.addIndexMeta(new IndexMeta(indexName, time, TrieIndex(entries)))
         case _ =>
           sys.error(s"Not supported index type $indexType")
