@@ -108,8 +108,9 @@ case class CreateIndex(
       val innerIndexType =
         if (sparkSession.conf.get(SQLConf.OAP_ENABLE_TRIE_OVER_BTREE) &&
           indexType == BTreeIndexType && indexColumns.length == 1) {
-          val entry = schema.map(_.name).toIndexedSeq.indexOf(indexColumns(0).columnName)
-          if (schema(entry).dataType == StringType) {
+          // if indexColumn only has size 1 and is of StringType, we can build trie to support
+          // better search.
+          if (schema(indexColumns(0).columnName).dataType.sameType(StringType)) {
             logInfo("Building a TRIE index for the column, to turn off this, " +
               s"please disable ${SQLConf.OAP_ENABLE_TRIE_OVER_BTREE.key}")
             PermutermIndexType
