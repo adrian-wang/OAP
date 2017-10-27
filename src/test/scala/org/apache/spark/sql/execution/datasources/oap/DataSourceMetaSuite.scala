@@ -47,6 +47,7 @@ class DataSourceMetaSuite extends SharedSQLContext with BeforeAndAfter {
   }
 
   override def afterAll(): Unit = {
+    sqlContext.conf.setConf(SQLConf.OAP_ENABLE_TRIE_OVER_BTREE, true)
     try {
       Utils.deleteRecursively(tmpDir)
     } finally {
