@@ -15,16 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.oap.utils
+package org.apache.spark.sql.execution.datasources.oap.index
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.oap.utils.PermutermUtils
 
-class PermutermUtilsSuite extends SparkFunSuite with Logging {
-  test("add byte array to trie") {
+class PermutermUtilsSuite extends SparkFunSuite {
+  test("generate permuterm") {
+    val row1 = InternalRow("Alpha")
+    val row2 = InternalRow("Alphabeta")
+    val row3 = InternalRow("AlphaHello")
+    val row4 = InternalRow("Beta")
+    val row5 = InternalRow("Zero")
+
     val uniqueList = new java.util.LinkedList[InternalRow]()
     val offsetMap = new java.util.HashMap[InternalRow, Int]()
-    // assert(PermutermUtils.generatePermuterm(uniqueList, offsetMap).toString == "")
+
+    val list1 = List(row1, row2)
+    list1.foreach(uniqueList.add)
+    list1.zipWithIndex.foreach(i => offsetMap.put(i._1, i._2))
+    val trie1 = PermutermUtils.generatePermuterm(uniqueList, offsetMap)
+    assert(trie1.toString.equals(""))
+    uniqueList.clear()
+    offsetMap.clear()
+
+    val list2 = List(row2, row3, row4, row5)
+    list2.foreach(uniqueList.add)
+    list2.zipWithIndex.foreach(i => offsetMap.put(i._1, i._2))
+    val trie2 = PermutermUtils.generatePermuterm(uniqueList, offsetMap)
+    assert(trie2.toString.equals(""))
+    uniqueList.clear()
+    offsetMap.clear()
   }
 }
