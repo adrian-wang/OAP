@@ -110,7 +110,8 @@ case class CreateIndex(
           indexType == BTreeIndexType && indexColumns.length == 1) {
           val entry = schema.map(_.name).toIndexedSeq.indexOf(indexColumns(0).columnName)
           if (schema(entry).dataType == StringType) {
-            logInfo(s"Building a TRIE index for the column, to turn off this, disable ${}")
+            logInfo("Building a TRIE index for the column, to turn off this, " +
+              s"please disable ${SQLConf.OAP_ENABLE_TRIE_OVER_BTREE.key}")
             PermutermIndexType
           } else BTreeIndexType
         } else indexType
