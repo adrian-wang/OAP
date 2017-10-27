@@ -53,6 +53,7 @@ class OapDDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEac
     sqlContext.dropTempTable("oap_test_1")
     sqlContext.dropTempTable("oap_test_2")
     sqlContext.sql("drop table oap_partition_table")
+    sqlContext.conf.setConf(SQLConf.OAP_ENABLE_TRIE_OVER_BTREE, true)
   }
 
   test("write index for table read in from DS api") {
