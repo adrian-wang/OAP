@@ -52,6 +52,7 @@ class IndexSelectionSuite extends SharedSQLContext with BeforeAndAfterEach{
 
   override def afterEach(): Unit = {
     sqlContext.dropTempTable("oap_test")
+    sqlContext.conf.setConf(SQLConf.OAP_ENABLE_TRIE_OVER_BTREE, true)
   }
 
   override def beforeAll(): Unit = {
