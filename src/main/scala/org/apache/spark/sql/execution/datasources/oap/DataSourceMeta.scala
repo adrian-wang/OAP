@@ -79,10 +79,8 @@ private[oap] case class BitMapIndex(entries: Seq[Int] = Nil) extends IndexType {
   override def toString: String = "COLUMN(" + entries.mkString(", ") + ") BITMAP"
 }
 
-private[oap] case class TrieIndex(entries: Seq[Int] = Nil) extends IndexType {
-  def appendEntry(entry: Int): TrieIndex = TrieIndex(entries :+ entry)
-
-  override def toString: String = "COLUMN(" + entries.mkString(", ") + ") TRIE"
+private[oap] case class TrieIndex(entry: Int) extends IndexType {
+  override def toString: String = s"COLUMN($entry) TRIE"
 }
 
 private[oap] case class HashIndex(entries: Seq[Int] = Nil) extends IndexType {
@@ -186,9 +184,9 @@ private[oap] class IndexMeta(
         out.writeByte(HASH_INDEX_TYPE)
         entries.foreach(keyBits += _)
         writeBitSet(keyBits, INDEX_META_KEY_LENGTH, out)
-      case TrieIndex(entries) =>
+      case TrieIndex(entry) =>
         out.writeByte(TRIE_INDEX_TYPE)
-        entries.foreach(keyBits += _)
+        keyBits += entry
         writeBitSet(keyBits, INDEX_META_KEY_LENGTH, out)
     }
   }
@@ -221,7 +219,7 @@ private[oap] class IndexMeta(
         flag match {
           case BITMAP_INDEX_TYPE => BitMapIndex(keyBits.toSeq)
           case HASH_INDEX_TYPE => HashIndex(keyBits.toSeq)
-          case TRIE_INDEX_TYPE => TrieIndex(keyBits.toSeq)
+          case TRIE_INDEX_TYPE => TrieIndex(keyBits.firstKey)
         }
     }
   }
