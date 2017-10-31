@@ -43,9 +43,9 @@ private[oap] object PermutermUtils extends Logging {
     val utf8String = row.getUTF8String(0)
     val bytes = utf8String.getBytes
     assert(offsetMap.containsKey(row))
-    val endMark = UTF8String.fromString("$").getBytes
+    val endMark = UTF8String.fromString("\3").getBytes
     val offset = offsetMap.get(row)
-    // including "$123" and "123$" and "23$1" and "3$12"
+    // including "\3abc" and "abc\3" and "bc\3a" and "c\3ab"
     (0 to bytes.length).map(i => {
       val token = bytes.slice(i, bytes.length) ++ endMark ++ bytes.slice(0, i)
       addArrayByteToTrie(token, offset, root)

@@ -40,23 +40,23 @@ class PermutermUtilsSuite extends SparkFunSuite {
     val trieLength1 = PermutermUtils.generatePermuterm(uniqueList, offsetMap, trie1)
     assert(trieLength1 == 109)
     assert(trie1.toString.equals(
-      "[Trie(\\x0,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,0) " +
+      "[Trie(\\0,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,0) " +
         "[Trie(b,-1) [Trie(e,-1) [Trie(t,-1) Trie(a,1)]]]]]]]]] [Trie(A,-1) [Trie(l,-1) [Trie" +
-        "(p,-1) [Trie(h,-1) [Trie(a,-1) Trie($,0) [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a," +
-        "-1) Trie($,1)]]]]]]]]] [Trie(a,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [" +
-        "Trie(h,0) [Trie(a,-1) [Trie(b,-1) [Trie(e,-1) Trie(t,1)]]]]]]]] [Trie(b,-1) [Trie(e," +
-        "-1) [Trie(t,-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) Trie(h,1)" +
-        "]]]]]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) [" +
-        "Trie(l,-1) [Trie(p,-1) [Trie(h,-1) Trie(a,1)]]]]]]]]] [Trie(e,-1) [Trie(t,-1) [Trie(a," +
-        "-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) Trie(b,1)" +
-        "]]]]]]]]] [Trie(h,-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) Trie(p,0)]]] [" +
-        "Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) " +
-        "Trie(p,1)]]]]]]]]] [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [Trie($,-1) Trie" +
-        "(A,0)] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie($,-1) Trie(A,1)]]]]]]]]]" +
-        " [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) Trie(l,0)]] [Trie(b,-1) [" +
-        "Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) Trie(l,1)]]]]]]]]] [Trie(" +
-        "t,-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a," +
-        "-1) [Trie(b,-1) Trie(e,1)]]]]]]]]]]"))
+        "(p,-1) [Trie(h,-1) [Trie(a,-1) Trie(\\3,0) [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(" +
+        "a,-1) Trie(\\3,1)]]]]]]]]] [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p," +
+        "-1) [Trie(h,0) [Trie(a,-1) [Trie(b,-1) [Trie(e,-1) Trie(t,1)]]]]]]]] [Trie(b,-1) [" +
+        "Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) " +
+        "Trie(h,1)]]]]]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie(\\3,-1) [" +
+        "Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) Trie(a,1)]]]]]]]]] [Trie(e,-1) [Trie(t" +
+        ",-1) [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(" +
+        "a,-1) Trie(b,1)]]]]]]]]] [Trie(h,-1) [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1" +
+        ") Trie(p,0)]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie(\\3,-1) [Trie(A," +
+        "-1) [Trie(l,-1) Trie(p,1)]]]]]]]]] [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [" +
+        "Trie(\\3,-1) Trie(A,0)] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie(\\3,-1)" +
+        " Trie(A,1)]]]]]]]]] [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) Trie" +
+        "(l,0)]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) Trie" +
+        "(l,1)]]]]]]]]] [Trie(t,-1) [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p," +
+        "-1) [Trie(h,-1) [Trie(a,-1) [Trie(b,-1) Trie(e,1)]]]]]]]]]]"))
     uniqueList.clear()
     offsetMap.clear()
 
@@ -67,41 +67,41 @@ class PermutermUtilsSuite extends SparkFunSuite {
     val trieLength2 = PermutermUtils.generatePermuterm(uniqueList, offsetMap, trie2)
     assert(trieLength2 == 232)
     assert(trie2.toString.equals(
-      "[Trie(\\x0,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1)" +
+      "[Trie(\\0,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1)" +
         " [Trie(H,-1) [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) Trie(o,1)]]]] [Trie(b,-1) [Trie(e,-1)" +
         " [Trie(t,-1) Trie(a,0)]]]]]]]] [Trie(B,-1) [Trie(e,-1) [Trie(t,-1) Trie(a,2)]]] [Trie(" +
         "Z,-1) [Trie(e,-1) [Trie(r,-1) Trie(o,3)]]]] [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(" +
-        "h,-1) [Trie(a,-1) [Trie(H,-1) [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) [Trie(o,-1) Trie($,1" +
-        ")]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) Trie($,0)]]]]]]]]] [Trie(B,-1)" +
-        " [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) Trie($,2)]]]] [Trie(H,-1) [Trie(e,-1) [Trie(l,-1)" +
-        " [Trie(l,-1) [Trie(o,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) " +
-        "Trie(a,1)]]]]]]]]]] [Trie(Z,-1) [Trie(e,-1) [Trie(r,-1) [Trie(o,-1) Trie($,3)]]]] [" +
-        "Trie(a,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [" +
-        "Trie(b,-1) [Trie(e,-1) Trie(t,0)]]]]]]] [Trie(B,-1) [Trie(e,-1) Trie(t,2)]]] [Trie(H," +
-        "-1) [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) [Trie(o,-1) [Trie($,-1) [Trie(A,-1) [Trie(l," +
-        "-1) [Trie(p,-1) Trie(h,1)]]]]]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [" +
-        "Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) Trie(h,0)]]]]]]]]] [Trie(b,-1) [Trie(e," +
-        "-1) [Trie(t,-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h," +
-        "-1) Trie(a,0)]]]]]]]]] [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) [Trie(o,-1) [Trie($,-1) [" +
-        "Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) Trie(H,1)]]]]]]]]] [Trie(" +
-        "r,-1) [Trie(o,-1) [Trie($,-1) Trie(Z,3)]]] [Trie(t,-1) [Trie(a,-1) [Trie($,-1) [Trie(" +
-        "A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) Trie(b,0)]]]]] Trie(B,2)]]]] [" +
-        "Trie(h,-1) [Trie(a,-1) [Trie(H,-1) [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) [Trie(o,-1) [" +
-        "Trie($,-1) [Trie(A,-1) [Trie(l,-1) Trie(p,1)]]]]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t," +
-        "-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) Trie(p,0)]]]]]]]]] [Trie(l,-1) [" +
-        "Trie(l,-1) [Trie(o,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [" +
-        "Trie(a,-1) [Trie(H,-1) Trie(e,1)]]]]]]]]] [Trie(o,-1) [Trie($,-1) [Trie(A,-1) [Trie(" +
-        "l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [Trie(H,-1) [Trie(e,-1) Trie(l,1)]]]]]]]]]" +
-        " [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [Trie(H,-1) [Trie(e,-1) [Trie(l,-1) [Trie(l,-1)" +
-        " [Trie(o,-1) [Trie($,-1) Trie(A,1)]]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a," +
-        "-1) [Trie($,-1) Trie(A,0)]]]]]]]]] [Trie(o,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [" +
-        "Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [Trie(H,-1) [Trie(e,-1) [Trie(l,-1) Trie(l,1)]]]]" +
-        "]]]] [Trie(Z,-1) [Trie(e,-1) Trie(r,3)]]]] [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [Trie(" +
-        "H,-1) [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) [Trie(o,-1) [Trie($,-1) [Trie(A,-1) Trie(l," +
-        "1)]]]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) " +
-        "Trie(l,0)]]]]]]]]] [Trie(r,-1) [Trie(o,-1) [Trie($,-1) [Trie(Z,-1) Trie(e,3)]]]] [" +
-        "Trie(t,-1) [Trie(a,-1) [Trie($,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [" +
-        "Trie(a,-1) [Trie(b,-1) Trie(e,0)]]]]]] [Trie(B,-1) Trie(e,2)]]]]]"))
+        "h,-1) [Trie(a,-1) [Trie(H,-1) [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) [Trie(o,-1) Trie(\\3" +
+        ",1)]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) Trie(\\3,0)]]]]]]]]] [Trie(B," +
+        "-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) Trie(\\3,2)]]]] [Trie(H,-1) [Trie(e,-1) [Trie(" +
+        "l,-1) [Trie(l,-1) [Trie(o,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(" +
+        "h,-1) Trie(a,1)]]]]]]]]]] [Trie(Z,-1) [Trie(e,-1) [Trie(r,-1) [Trie(o,-1) Trie(\\3,3)]" +
+        "]]] [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a," +
+        "-1) [Trie(b,-1) [Trie(e,-1) Trie(t,0)]]]]]]] [Trie(B,-1) [Trie(e,-1) Trie(t,2)]]] [" +
+        "Trie(H,-1) [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) [Trie(o,-1) [Trie(\\3,-1) [Trie(A,-1) [" +
+        "Trie(l,-1) [Trie(p,-1) Trie(h,1)]]]]]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a," +
+        "-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) Trie(h,0)]]]]]]]]] [Trie(b,-1) [" +
+        "Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [" +
+        "Trie(h,-1) Trie(a,0)]]]]]]]]] [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) [Trie(o,-1) [Trie(" +
+        "\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) Trie(H,1)]]]]]]]]]" +
+        " [Trie(r,-1) [Trie(o,-1) [Trie(\\3,-1) Trie(Z,3)]]] [Trie(t,-1) [Trie(a,-1) [Trie(\\3," +
+        "-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) Trie(b,0)]]]]] Trie(B," +
+        "2)]]]] [Trie(h,-1) [Trie(a,-1) [Trie(H,-1) [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) [Trie(o" +
+        ",-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) Trie(p,1)]]]]]]]] [Trie(b,-1) [Trie(e,-1) [" +
+        "Trie(t,-1) [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) Trie(p,0)]]]]]]]]] [Trie(" +
+        "l,-1) [Trie(l,-1) [Trie(o,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [Trie(" +
+        "h,-1) [Trie(a,-1) [Trie(H,-1) Trie(e,1)]]]]]]]]] [Trie(o,-1) [Trie(\\3,-1) [Trie(A,-1)" +
+        " [Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [Trie(H,-1) [Trie(e,-1) Trie(l,1)]]]]" +
+        "]]]]] [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [Trie(H,-1) [Trie(e,-1) [Trie(l,-1) [Trie(l," +
+        "-1) [Trie(o,-1) [Trie(\\3,-1) Trie(A,1)]]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [" +
+        "Trie(a,-1) [Trie(\\3,-1) Trie(A,0)]]]]]]]]] [Trie(o,-1) [Trie(\\3,-1) [Trie(A,-1) [" +
+        "Trie(l,-1) [Trie(p,-1) [Trie(h,-1) [Trie(a,-1) [Trie(H,-1) [Trie(e,-1) [Trie(l,-1) " +
+        "Trie(l,1)]]]]]]]] [Trie(Z,-1) [Trie(e,-1) Trie(r,3)]]]] [Trie(p,-1) [Trie(h,-1) [Trie(" +
+        "a,-1) [Trie(H,-1) [Trie(e,-1) [Trie(l,-1) [Trie(l,-1) [Trie(o,-1) [Trie(\\3,-1) [Trie(" +
+        "A,-1) Trie(l,1)]]]]]]] [Trie(b,-1) [Trie(e,-1) [Trie(t,-1) [Trie(a,-1) [Trie(\\3,-1) [" +
+        "Trie(A,-1) Trie(l,0)]]]]]]]]] [Trie(r,-1) [Trie(o,-1) [Trie(\\3,-1) [Trie(Z,-1) Trie(" +
+        "e,3)]]]] [Trie(t,-1) [Trie(a,-1) [Trie(\\3,-1) [Trie(A,-1) [Trie(l,-1) [Trie(p,-1) [" +
+        "Trie(h,-1) [Trie(a,-1) [Trie(b,-1) Trie(e,0)]]]]]] [Trie(B,-1) Trie(e,2)]]]]]"))
     uniqueList.clear()
     offsetMap.clear()
   }

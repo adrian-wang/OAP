@@ -34,7 +34,7 @@ private[oap] trait TrieNode {
   // for debug
   override def toString: String = {
     def disp(key: Byte): String =
-      if (key >= 32 && key <= 126) key.toChar.toString else "\\x" + key.toLong.toHexString
+      if (key >= 32 && key <= 126) key.toChar.toString else "\\" + key.toLong.toHexString
     if (childCount > 0) {
       s"[Trie(${disp(nodeKey)},$rowIdsPointer) ${children.mkString(" ")}]"
     } else {
