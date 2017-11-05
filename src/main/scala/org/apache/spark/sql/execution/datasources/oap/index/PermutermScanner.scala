@@ -34,7 +34,7 @@ private[oap] case class PermutermScanner(idxMeta: IndexMeta) extends IndexScanne
   var indexFiber: IndexFiber = _
   var indexData: CacheResult = _
   var matchRoot: TrieNode = null
-  private lazy val allPointers = matchRoot.allPointers
+  protected lazy val allPointers = matchRoot.allPointers
   private lazy val allUnsafeIds = allPointers.map(UnsafeIds(indexData.buffer, _))
   private lazy val internalIter = allUnsafeIds.iterator
   private var remain: Int = 0
@@ -84,7 +84,7 @@ private[oap] case class PermutermScanner(idxMeta: IndexMeta) extends IndexScanne
     UnsafeTrie(data, rootPage, rootOffset, dataEnd)
   }
 
-  override def toString: String = "TrieScanner"
+  override def toString: String = "PermutermScanner"
 
   override def hasNext: Boolean = if (matchRoot != null) {
     internalIter.hasNext || remain > 0
