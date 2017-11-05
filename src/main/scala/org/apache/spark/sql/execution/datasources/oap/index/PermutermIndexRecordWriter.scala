@@ -46,11 +46,11 @@ private[index] class PermutermIndexRecordWriter(
   }
 
   override def close(context: TaskAttemptContext): Unit = {
-    flushToFile(writer)
+    flushToFile()
     writer.close()
   }
 
-  def flushToFile(out: OutputStream): Unit = {
+  def flushToFile(): Unit = {
     val statisticsManager = new StatisticsManager
     statisticsManager.initialize(PermutermIndexType, keySchema, configuration)
 
@@ -113,10 +113,6 @@ private[index] class PermutermIndexRecordWriter(
       treeOffset: Int): Int = {
     var length = 0
     trieNode.children.foreach(length += writeTrie(writer, _, treeMap, treeOffset + length))
-    if (!treeMap.containsKey(trieNode)) {
-      treeMap.put(trieNode, new java.util.Stack[TriePointer])
-    }
-    treeMap.get(trieNode).push(TriePointer(page = 1, treeOffset + length))
     IndexUtils.writeInt(writer, (trieNode.nodeKey << 16) + trieNode.childCount)
     IndexUtils.writeInt(writer, trieNode.rowIdsPointer)
     length += 8
@@ -125,6 +121,11 @@ private[index] class PermutermIndexRecordWriter(
       IndexUtils.writeInt(writer, pos.offset)
       IndexUtils.writeInt(writer, pos.page)
     })
+    // push after pop children
+    if (!treeMap.containsKey(trieNode)) {
+      treeMap.put(trieNode, new java.util.Stack[TriePointer])
+    }
+    treeMap.get(trieNode).push(TriePointer(page = 1, treeOffset + length))
     length + trieNode.childCount * 8
   }
 
