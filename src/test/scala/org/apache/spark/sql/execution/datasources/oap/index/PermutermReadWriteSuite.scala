@@ -34,18 +34,18 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 class PermutermReadWriteSuite extends SparkFunSuite {
 
   test("Permuterm index Read/Write") {
-    val row1 = InternalRow(UTF8String.fromString("Alpha"))
-    val row2 = InternalRow(UTF8String.fromString("Alphabeta"))
-    val row3 = InternalRow(UTF8String.fromString("AlphaHello"))
-    val row4 = InternalRow(UTF8String.fromString("Beta"))
-    // val row5 = InternalRow(UTF8String.fromString("Zero"))
+    val row1 = UTF8String.fromString("Alpha")
+    val row2 = UTF8String.fromString("AlphaHello")
+    val row3 = UTF8String.fromString("Alphabeta")
+    val row4 = UTF8String.fromString("Beta")
+    val row5 = UTF8String.fromString("Zero")
 
-    val uniqueList = new java.util.LinkedList[InternalRow]()
-    val offsetMap = new java.util.HashMap[InternalRow, Int]()
+    val uniqueList = new java.util.LinkedList[UTF8String]()
+    val offsetMap = new java.util.HashMap[UTF8String, Int]()
 
-    val list = List(row1, row2, row3, row4)
+    val list = List(row1, row2, row3, row4, row5)
     list.foreach(uniqueList.add)
-    list.zipWithIndex.foreach(i => offsetMap.put(i._1, i._2))
+    list.zipWithIndex.foreach(i => offsetMap.put(i._1, 8 * (i._2 + 1)))
     val trie = InMemoryTrie()
     PermutermUtils.generatePermuterm(uniqueList, offsetMap, trie)
 
@@ -56,7 +56,7 @@ class PermutermReadWriteSuite extends SparkFunSuite {
     val indexWriter = new PermutermIndexRecordWriter(
       configuration, fileWriter, new StructType().add("s", StringType))
 
-    list.foreach(indexWriter.write(null, _))
+    list.foreach(s => indexWriter.write(null, InternalRow(s)))
     indexWriter.flushToFile()
     fileWriter.close()
 

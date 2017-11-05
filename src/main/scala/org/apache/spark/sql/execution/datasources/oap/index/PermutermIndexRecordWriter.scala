@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.datasources.oap.io.IndexFile
 import org.apache.spark.sql.execution.datasources.oap.statistics.StatisticsManager
 import org.apache.spark.sql.execution.datasources.oap.utils.PermutermUtils
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.unsafe.types.UTF8String
 
 private[index] class PermutermIndexRecordWriter(
     configuration: Configuration,
@@ -36,12 +37,12 @@ private[index] class PermutermIndexRecordWriter(
     keySchema: StructType) extends RecordWriter[Void, InternalRow] {
   @transient private lazy val genericProjector = FromUnsafeProjection(keySchema)
 
-  private val multiHashMap = ArrayListMultimap.create[InternalRow, Int]()
+  private val multiHashMap = ArrayListMultimap.create[UTF8String, Int]()
   private var recordCount: Int = 0
 
   override def write(key: Void, value: InternalRow): Unit = {
     val v = genericProjector(value).copy()
-    multiHashMap.put(v, recordCount)
+    multiHashMap.put(v.getUTF8String(0), recordCount)
     recordCount += 1
   }
 
@@ -55,13 +56,14 @@ private[index] class PermutermIndexRecordWriter(
     statisticsManager.initialize(PermutermIndexType, keySchema, configuration)
 
     val partitionUniqueSize = multiHashMap.keySet().size()
-    val uniqueKeys = multiHashMap.keySet().toArray(new Array[InternalRow](partitionUniqueSize))
+    val uniqueKeys = multiHashMap.keySet().toArray(
+      new Array[UTF8String](partitionUniqueSize)).sorted
     assert(uniqueKeys.size == partitionUniqueSize)
 
     // build index file
     var i = 0
     var fileOffset = 0
-    val offsetMap = new java.util.HashMap[InternalRow, Int]()
+    val offsetMap = new java.util.HashMap[UTF8String, Int]()
     fileOffset += writeHead(writer, IndexFile.INDEX_VERSION)
     // write data segment.
     while (i < partitionUniqueSize) {
@@ -82,7 +84,7 @@ private[index] class PermutermIndexRecordWriter(
     }
     val dataEnd = fileOffset
     // write index segment.
-    val uniqueKeysList = new java.util.LinkedList[InternalRow]()
+    val uniqueKeysList = new java.util.LinkedList[UTF8String]()
     import scala.collection.JavaConverters._
     uniqueKeysList.addAll(uniqueKeys.toSeq.asJava)
 
@@ -115,7 +117,6 @@ private[index] class PermutermIndexRecordWriter(
     trieNode.children.foreach(length += writeTrie(writer, _, treeMap, treeOffset + length))
     IndexUtils.writeInt(writer, (trieNode.nodeKey << 16) + trieNode.childCount)
     IndexUtils.writeInt(writer, trieNode.rowIdsPointer)
-    length += 8
     trieNode.children.foreach(c => {
       val pos = treeMap.get(c).pop()
       IndexUtils.writeInt(writer, pos.offset)
@@ -126,7 +127,7 @@ private[index] class PermutermIndexRecordWriter(
       treeMap.put(trieNode, new java.util.Stack[TriePointer])
     }
     treeMap.get(trieNode).push(TriePointer(page = 1, treeOffset + length))
-    length + trieNode.childCount * 8
+    length + 8 + trieNode.childCount * 8
   }
 
   private def writeHead(writer: OutputStream, version: Int): Int = {
