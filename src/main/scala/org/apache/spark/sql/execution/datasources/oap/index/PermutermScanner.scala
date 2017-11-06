@@ -43,7 +43,6 @@ private[oap] case class PermutermScanner(idxMeta: IndexMeta) extends IndexScanne
 
   def initialize(dataPath: Path, conf: Configuration): IndexScanner = {
     assert(keySchema ne null)
-    // val root = BTreeIndexCacheManager(dataPath, context, keySchema, meta)
     val path = IndexUtils.indexFileFromDataFile(dataPath, meta.name, meta.time)
     logDebug("Loading Index File: " + path)
     logDebug("\tFile Size: " + path.getFileSystem(conf).getFileStatus(path).getLen)
@@ -86,11 +85,7 @@ private[oap] case class PermutermScanner(idxMeta: IndexMeta) extends IndexScanne
 
   override def toString: String = "PermutermScanner"
 
-  override def hasNext: Boolean = if (matchRoot != null) {
-    internalIter.hasNext || remain > 0
-  } else {
-    false
-  }
+  override def hasNext: Boolean = matchRoot != null && (remain > 0 || internalIter.hasNext)
 
   override def next(): Long = {
     if (internalIter.hasNext && remain == 0) {
