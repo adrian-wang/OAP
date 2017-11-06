@@ -139,4 +139,22 @@ class PermutermScannerSuite extends SparkFunSuite {
     assert(scanner.matchRoot != null)
     assert(scanner.allPointersString.equals("24,32"))
   }
+
+  test("scan unsafe permuterm trie #5") {
+    val scanner = testScanUnsafeTrie()
+    // A%eta
+    scanner.pattern = UTF8String.fromString("eta\u0003A").getBytes
+    scanner.scan()
+    assert(scanner.matchRoot != null)
+    assert(scanner.allPointersString.equals("24"))
+  }
+
+  test("scan unsafe permuterm trie #6") {
+    val scanner = testScanUnsafeTrie()
+    // %ll%
+    scanner.pattern = UTF8String.fromString("ll").getBytes
+    scanner.scan()
+    assert(scanner.matchRoot != null)
+    assert(scanner.allPointersString.equals("16"))
+  }
 }
