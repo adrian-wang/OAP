@@ -53,7 +53,7 @@ class PermutermScannerSuite extends SparkFunSuite {
   }
 
   class TestPermutermScanner
-    extends PermutermScanner(new IndexMeta("index1", "ABC", TrieIndex(0))) {
+      extends PermutermScanner(new IndexMeta("index1", "ABC", TrieIndex(0))) {
     private var unsafeTrie: UnsafeTrie = _
     def allPointersString: String = allPointers.mkString(",")
     override def initialize(path: Path, configuration: Configuration): TestPermutermScanner = {
