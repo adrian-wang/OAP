@@ -76,10 +76,9 @@ private[oap] case class PermutermScanner(idxMeta: IndexMeta) extends IndexScanne
       case buf: DirectBuffer => (null, buf.address())
       case _ => (data.toArray, Platform.BYTE_ARRAY_OFFSET)
     }
-    val dataEnd = Platform.getInt(baseObject, baseOffset + data.size - 8)
-    // val length = Platform.getInt(baseObject, baseOffset + data.size - 4)
-    val rootPage = Platform.getInt(baseObject, baseOffset + data.size - 12)
-    val rootOffset = Platform.getInt(baseObject, baseOffset + data.size - 16)
+    val dataEnd = Platform.getInt(baseObject, baseOffset + data.size - 4)
+    val rootPage = Platform.getInt(baseObject, baseOffset + data.size - 8)
+    val rootOffset = Platform.getInt(baseObject, baseOffset + data.size - 12)
     UnsafeTrie(data, rootPage, rootOffset, dataEnd)
   }
 

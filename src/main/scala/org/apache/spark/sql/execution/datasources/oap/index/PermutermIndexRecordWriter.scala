@@ -98,16 +98,18 @@ private[index] class PermutermIndexRecordWriter(
     val treeMap = new java.util.HashMap[TrieNode, java.util.Stack[TriePointer]]()
     val pagedWriter = new PagedWriter(writer, pages)
     pagedWriter.initialize()
+    // from page #1 to page #{pages.size}
     writeTrie(pagedWriter, trie, treeMap)
 
+    // in page #{pages.size + 1}.
+    // This is last page of file, will not appear in page table
+    pagedWriter.writePageTable()
     statisticsManager.write(writer)
 
     val pos = treeMap.get(trie).pop()
     IndexUtils.writeInt(writer, pos.offset)
     IndexUtils.writeInt(writer, pos.page)
     IndexUtils.writeInt(writer, dataEnd)
-    // TODO remove this leads to some bizarre
-    IndexUtils.writeInt(writer, 0)
   }
 
   private def writeTrie(
@@ -132,7 +134,7 @@ private class PagedWriter(internalWriter: OutputStream, pageSplit: Seq[Int]) {
   private var currentLengthInPage: Int = _
   private var currentPage: Int = _
   private var currentPageStart: Long = _
-  private val pageMap: mutable.Map[Int, (Long, Int)] = mutable.Map[Int, (Long, Int)]()
+  private val pageMap: mutable.Map[Int, TriePage] = mutable.Map[Int, TriePage]()
   def initialize(): Unit = {
     currentPageStart = 0
     currentNodeInPage = 0
@@ -149,10 +151,18 @@ private class PagedWriter(internalWriter: OutputStream, pageSplit: Seq[Int]) {
     }
   }
   private def finishPage(): Unit = {
-    pageMap += (currentPage -> (currentPageStart, currentLengthInPage))
+    pageMap += (currentPage -> TriePage(currentPageStart, currentLengthInPage))
   }
   def writePageTable(): Unit = {
-    
+    IndexUtils.writeInt(internalWriter, pageSplit.size)
+    (1 to pageSplit.size).foreach(i => {
+      IndexUtils.writeLong(internalWriter, pageMap(i).offset)
+      IndexUtils.writeInt(internalWriter, pageMap(i).length)
+    })
+    currentLengthInPage = currentLengthInPage + 4 + 12 * pageSplit.size
+  }
+  def writeStatistics(statisticsManager: StatisticsManager): Unit = {
+    currentLengthInPage += statisticsManager.write(internalWriter).toInt
   }
   def writeNode(
       trieNode: TrieNode,
@@ -176,3 +186,5 @@ private class PagedWriter(internalWriter: OutputStream, pageSplit: Seq[Int]) {
     nodeLength
   }
 }
+
+case class TriePage(offset: Long, length: Int)
