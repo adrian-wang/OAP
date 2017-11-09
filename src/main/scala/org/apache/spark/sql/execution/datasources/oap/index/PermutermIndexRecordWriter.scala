@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.oap.index
 
 import java.io.OutputStream
 
+import scala.collection.mutable
+
 import com.google.common.collect.ArrayListMultimap
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.{TaskAttemptContext, RecordWriter}
@@ -92,11 +94,11 @@ private[index] class PermutermIndexRecordWriter(
     val trie = InMemoryTrie()
     val trieSize = PermutermUtils.generatePermuterm(uniqueKeysList, offsetMap, trie)
     val maxPage = configuration.getInt(SQLConf.OAP_PERMUTERM_MAX_GROUP_SIZE.key, 128 * 1024)
-    val pages: Seq[Int] = PermutermUtils.generatePages(trieSize, maxPage)
+    val pages: Seq[Int] = PermutermUtils.generatePages(trieSize + 1, maxPage)
     val treeMap = new java.util.HashMap[TrieNode, java.util.Stack[TriePointer]]()
     val pagedWriter = new PagedWriter(writer, pages)
     pagedWriter.initialize()
-    writeTrie(pagedWriter, trie, treeMap, 0)
+    writeTrie(pagedWriter, trie, treeMap)
 
     statisticsManager.write(writer)
 
@@ -104,17 +106,16 @@ private[index] class PermutermIndexRecordWriter(
     IndexUtils.writeInt(writer, pos.offset)
     IndexUtils.writeInt(writer, pos.page)
     IndexUtils.writeInt(writer, dataEnd)
-    // TODO remove this
+    // TODO remove this leads to some bizarre
     IndexUtils.writeInt(writer, 0)
   }
 
   private def writeTrie(
       writer: PagedWriter, trieNode: TrieNode,
-      treeMap: java.util.HashMap[TrieNode, java.util.Stack[TriePointer]],
-      treeOffset: Int): Int = {
+      treeMap: java.util.HashMap[TrieNode, java.util.Stack[TriePointer]]): Int = {
     var length = 0
-    trieNode.children.foreach(length += writeTrie(writer, _, treeMap, treeOffset + length))
-    writer.writeNode(trieNode, treeMap, treeOffset, length)
+    trieNode.children.foreach(length += writeTrie(writer, _, treeMap))
+    length + writer.writeNode(trieNode, treeMap)
   }
 
   private def writeHead(writer: OutputStream, version: Int): Int = {
@@ -124,45 +125,54 @@ private[index] class PermutermIndexRecordWriter(
     writer.write(data)
     IndexFile.indexFileHeaderLength
   }
+}
 
-  private class PagedWriter(internalWriter: OutputStream, pageSplit: Seq[Int]) {
-    private var writerCount: Long = _
-    private var currentNodeInPage: Int = _
-    private var currentLengthInPage: Int = _
-    private var currentPage: Int = _
-    def initialize(): Unit = {
-      writerCount = 0L
+private class PagedWriter(internalWriter: OutputStream, pageSplit: Seq[Int]) {
+  private var currentNodeInPage: Int = _
+  private var currentLengthInPage: Int = _
+  private var currentPage: Int = _
+  private var currentPageStart: Long = _
+  private val pageMap: mutable.Map[Int, (Long, Int)] = mutable.Map[Int, (Long, Int)]()
+  def initialize(): Unit = {
+    currentPageStart = 0
+    currentNodeInPage = 0
+    currentLengthInPage = 0
+    currentPage = 1
+  }
+  private def switchToNewPageHeadIfNecessary(): Unit = {
+    if (currentNodeInPage >= pageSplit(currentPage - 1)) {
+      finishPage()
+      currentPage += 1
       currentNodeInPage = 0
+      currentPageStart += currentLengthInPage
       currentLengthInPage = 0
-      currentPage = 1
     }
-    def switchToNewPageHeadIfNecessary(): Unit = {
-      if (currentNodeInPage >= pageSplit(currentPage - 1)) {
-        currentPage += 1
-        currentNodeInPage = 0
-        currentLengthInPage = 0
-      }
+  }
+  private def finishPage(): Unit = {
+    pageMap += (currentPage -> (currentPageStart, currentLengthInPage))
+  }
+  def writePageTable(): Unit = {
+    
+  }
+  def writeNode(
+      trieNode: TrieNode,
+      treeMap: java.util.HashMap[TrieNode, java.util.Stack[TriePointer]]): Int = {
+    IndexUtils.writeInt(internalWriter, (trieNode.nodeKey << 16) + trieNode.childCount)
+    IndexUtils.writeInt(internalWriter, trieNode.rowIdsPointer)
+    trieNode.children.foreach(c => {
+      val pos = treeMap.get(c).pop()
+      IndexUtils.writeInt(internalWriter, pos.offset)
+      IndexUtils.writeInt(internalWriter, pos.page)
+    })
+    // push after pop children
+    if (!treeMap.containsKey(trieNode)) {
+      treeMap.put(trieNode, new java.util.Stack[TriePointer])
     }
-    def writeNode(
-        trieNode: TrieNode,
-        treeMap: java.util.HashMap[TrieNode, java.util.Stack[TriePointer]],
-        treeOffset: Int,
-        nodeLength: Int): Int = {
-      switchToNewPageHeadIfNecessary()
-      IndexUtils.writeInt(internalWriter, (trieNode.nodeKey << 16) + trieNode.childCount)
-      IndexUtils.writeInt(internalWriter, trieNode.rowIdsPointer)
-      trieNode.children.foreach(c => {
-        val pos = treeMap.get(c).pop()
-        IndexUtils.writeInt(internalWriter, pos.offset)
-        IndexUtils.writeInt(internalWriter, pos.page)
-      })
-      // push after pop children
-      if (!treeMap.containsKey(trieNode)) {
-        treeMap.put(trieNode, new java.util.Stack[TriePointer])
-      }
-      treeMap.get(trieNode).push(TriePointer(currentPage, treeOffset + nodeLength))
-      writerCount += 1
-      nodeLength + 8 + trieNode.childCount * 8
-    }
+    treeMap.get(trieNode).push(TriePointer(currentPage, currentLengthInPage))
+    val nodeLength = 8 + trieNode.childCount * 8
+    currentLengthInPage = currentLengthInPage + nodeLength
+    currentNodeInPage += 1
+    switchToNewPageHeadIfNecessary()
+    nodeLength
   }
 }
