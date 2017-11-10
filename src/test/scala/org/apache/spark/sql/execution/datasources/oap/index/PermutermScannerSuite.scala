@@ -65,11 +65,10 @@ class PermutermScannerSuite extends SparkFunSuite {
       cbbos.close()
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
       val dataEnd = Platform.getInt(buffer, baseOffset + fileSize - 8)
-      val rootPage = Platform.getInt(buffer, baseOffset + fileSize - 12)
       val rootOffset = Platform.getInt(buffer, baseOffset + fileSize - 16)
       val cbb = cbbos.toChunkedByteBuffer
       permutermDataCache = new CacheResult(true, cbb)
-      unsafeTrie = UnsafeTrie(cbb, rootPage, rootOffset, dataEnd, _ => cbb)
+      unsafeTrie = UnsafeTrie(cbb, rootOffset, dataEnd, _ => cbb)
       this
     }
     def scan(): Unit = {

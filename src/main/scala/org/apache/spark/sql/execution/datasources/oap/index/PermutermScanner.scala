@@ -89,7 +89,8 @@ private[oap] case class PermutermScanner(idxMeta: IndexMeta) extends IndexScanne
       PermutermFiber(permutermFile, 0, dataEnd), conf)
     val pageTable = UnsafeTrieFooter(data)
     UnsafeTrie(
-      data, rootPage, rootOffset, dataEnd, i => getPageData(pageTable.page(i, dataEnd), conf))
+      getPageData(pageTable.page(rootPage, dataEnd), conf),
+      rootOffset, dataEnd, i => getPageData(pageTable.page(i, dataEnd), conf))
   }
 
   override def toString: String = "PermutermScanner"
