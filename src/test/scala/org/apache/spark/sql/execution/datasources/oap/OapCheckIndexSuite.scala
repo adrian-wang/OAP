@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.{QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.execution.datasources.oap.index.IndexUtils
 import org.apache.spark.sql.execution.datasources.oap.utils.OapUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -35,7 +35,6 @@ class OapCheckIndexSuite extends QueryTest with SharedSQLContext with BeforeAndA
   sparkConf.set("spark.memory.offHeap.size", "100m")
 
   override def beforeEach(): Unit = {
-    sqlContext.conf.setConf(SQLConf.OAP_IS_TESTING, true)
     sqlContext.conf.setConf(SQLConf.OAP_ENABLE_TRIE_OVER_BTREE, false)
     val path1 = Utils.createTempDir().getAbsolutePath
     val path2 = Utils.createTempDir().getAbsolutePath
@@ -294,5 +293,41 @@ class OapCheckIndexSuite extends QueryTest with SharedSQLContext with BeforeAndA
           |indexColumn(s): a, indexType: BTree
           |for Data File: ${partitionPath.toUri.getPath}/$dataFileName
           |of table: oap_partition_table""".stripMargin))
+  }
+
+  test("check multiple partition directories for ambiguous indices") {
+    val data = sparkContext.parallelize(1 to 300, 4).map { i => (i, i) }
+    data.toDF("key", "value").createOrReplaceTempView("t")
+
+    sql(
+      """
+        |INSERT OVERWRITE TABLE oap_partition_table
+        |partition (b=1, c='c1')
+        |SELECT key from t where value < 4
+      """.stripMargin)
+
+    sql(
+      """
+        |INSERT INTO TABLE oap_partition_table
+        |partition (b=2, c='c2')
+        |SELECT key from t where value == 104
+      """.stripMargin)
+
+    // Create a B+ tree index on Column("a")
+    sql("create oindex idx1 on oap_partition_table(a) partition(b=1, c='c1')")
+
+    val partitionPath =
+      new Path(spark.sqlContext.conf.warehousePath, "oap_partition_table/b=2/c=c2")
+    checkAnswer(sql("check oindex on oap_partition_table"),
+      Row(s"Meta file not found in partition: ${partitionPath.toUri.getPath}"))
+
+    sql("create oindex idx1 on oap_partition_table(a) using bitmap partition(b=2, c='c2')")
+
+    val exception = intercept[AnalysisException]{
+      sql("check oindex on oap_partition_table")
+    }
+    assert(exception.message.startsWith(
+      "\nAmbiguous Index(different indices have the same name):\nindex name:idx1"))
+
   }
 }

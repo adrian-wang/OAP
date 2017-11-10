@@ -81,6 +81,8 @@ object FiberCacheManager extends Logging {
       case PermutermFiber(file, pageOffset, pageLength) =>
         FiberBlockId("permuterm_" + file + "_" + pageOffset + "_" + pageLength)
       case PermutermFootFiber(file) => FiberBlockId("permuterm_" + file + "_footer")
+      case BitmapFiber(_, file, sectionIdxOfFile, loadUnitIdxOfSection) =>
+        FiberBlockId("bitmapIndex_" + file + "_" + sectionIdxOfFile + "_" + loadUnitIdxOfSection)
     }
   }
 
@@ -142,6 +144,7 @@ object FiberCacheManager extends Logging {
     case BTreeFiber(getFiberData, _, _, _) => toByteBuffer(getFiberData())
     case PermutermFiber(file, pageOffset, pageLength) => file.getPage(pageOffset, pageLength, conf)
     case PermutermFootFiber(file) => file.getRootPage(conf)
+    case BitmapFiber(getFiberData, _, _, _) => toByteBuffer(getFiberData())
     case other => throw new OapException(s"Cannot identify what's $other")
   }
 
@@ -203,7 +206,7 @@ private[oap] object DataFileHandleCacheManager extends Logging {
         override def onRemoval(n: RemovalNotification[ENTRY, DataFileHandle])
         : Unit = {
           logDebug(s"Evicting Data File Handle ${n.getKey.path}")
-          n.getValue.fin.close()
+          n.getValue.close
         }
       })
       .build[ENTRY, DataFileHandle](new CacheLoader[ENTRY, DataFileHandle]() {
@@ -238,3 +241,12 @@ private[oap] case class PermutermFootFiber(file: PermutermIndexFile) extends Fib
 
 private[oap] case class PermutermFiber(
     file: PermutermIndexFile, pageOffset: Long, pageLength: Int) extends Fiber
+
+private[oap]
+case class BitmapFiber(
+    getFiberData: () => Array[Byte],
+    file: String,
+    // "0" means no split sections within file.
+    sectionIdxOfFile: Int,
+    // "0" means no smaller loading units.
+    loadUnitIdxOfSection: Int) extends Fiber
