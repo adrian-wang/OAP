@@ -68,10 +68,11 @@ class PermutermReadWriteSuite extends SparkFunSuite {
     cbbos.write(buffer)
     cbbos.close()
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
-    val dataEnd = Platform.getInt(buffer, baseOffset + fileSize - 4)
-    val rootPage = Platform.getInt(buffer, baseOffset + fileSize - 8)
-    val rootOffset = Platform.getInt(buffer, baseOffset + fileSize - 12)
-    val fileTrie = UnsafeTrie(cbbos.toChunkedByteBuffer, rootPage, rootOffset, dataEnd)
+    val dataEnd = Platform.getInt(buffer, baseOffset + fileSize - 8)
+    val rootPage = Platform.getInt(buffer, baseOffset + fileSize - 12)
+    val rootOffset = Platform.getInt(buffer, baseOffset + fileSize - 16)
+    val cbb = cbbos.toChunkedByteBuffer
+    val fileTrie = UnsafeTrie(cbb, rootPage, rootOffset, dataEnd, _ => cbb)
     assert(fileTrie.toString.equals(trie.toString), fileTrie.toString + "\n" + trie.toString)
   }
 }

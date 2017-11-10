@@ -104,12 +104,10 @@ private[index] class PermutermIndexRecordWriter(
     // in page #{pages.size + 1}.
     // This is last page of file, will not appear in page table
     pagedWriter.writePageTable()
-    statisticsManager.write(writer)
+    pagedWriter.writeStatistics(statisticsManager)
 
     val pos = treeMap.get(trie).pop()
-    IndexUtils.writeInt(writer, pos.offset)
-    IndexUtils.writeInt(writer, pos.page)
-    IndexUtils.writeInt(writer, dataEnd)
+    pagedWriter.writeFooter(pos, dataEnd)
   }
 
   private def writeTrie(
@@ -184,6 +182,13 @@ private class PagedWriter(internalWriter: OutputStream, pageSplit: Seq[Int]) {
     currentNodeInPage += 1
     switchToNewPageHeadIfNecessary()
     nodeLength
+  }
+  def writeFooter(root: TriePointer, dataEnd: Int): Unit = {
+    IndexUtils.writeInt(internalWriter, root.offset)
+    IndexUtils.writeInt(internalWriter, root.page)
+    IndexUtils.writeInt(internalWriter, dataEnd)
+    currentLengthInPage += 16
+    IndexUtils.writeInt(internalWriter, currentLengthInPage)
   }
 }
 

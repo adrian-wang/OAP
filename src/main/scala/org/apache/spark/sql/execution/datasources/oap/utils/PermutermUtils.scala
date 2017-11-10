@@ -53,7 +53,7 @@ private[oap] object PermutermUtils extends Logging {
       offsetMap: java.util.HashMap[UTF8String, Int]): Int = {
     val bytes = utf8String.getBytes
     assert(offsetMap.containsKey(utf8String))
-    val endMark = UTF8String.fromString("\3").getBytes
+    val endMark = UTF8String.fromString("\u0003").getBytes
     val offset = offsetMap.get(utf8String)
     // including "\3abc" and "abc\3" and "bc\3a" and "c\3ab"
     (0 to bytes.length).map(i => {

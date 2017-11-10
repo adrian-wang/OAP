@@ -35,7 +35,7 @@ import org.apache.spark.storage.{BlockId, FiberBlockId, StorageLevel}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.TimeStampedHashMap
 import org.apache.spark.util.collection.BitSet
-import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 
 // TODO need to register within the SparkContext
@@ -78,6 +78,9 @@ object FiberCacheManager extends Logging {
         FiberBlockId("index_" + file.file)
       case BTreeFiber(_, file, section, idx) =>
         FiberBlockId("btree_" + file + "_" + section + "_" + idx)
+      case PermutermFiber(file, pageOffset, pageLength) =>
+        FiberBlockId("permuterm_" + file + "_" + pageOffset + "_" + pageLength)
+      case PermutermFootFiber(file) => FiberBlockId("permuterm_" + file + "_footer")
     }
   }
 
@@ -137,6 +140,8 @@ object FiberCacheManager extends Logging {
       file.getFiberData(rowGroupId, columnIndex, conf)
     case IndexFiber(file) => file.getIndexFiberData(conf)
     case BTreeFiber(getFiberData, _, _, _) => toByteBuffer(getFiberData())
+    case PermutermFiber(file, pageOffset, pageLength) => file.getPage(pageOffset, pageLength, conf)
+    case PermutermFootFiber(file) => file.getRootPage(conf)
     case other => throw new OapException(s"Cannot identify what's $other")
   }
 
@@ -228,3 +233,8 @@ case class BTreeFiber(
     file: String,
     section: Int,
     idx: Int) extends Fiber
+
+private[oap] case class PermutermFootFiber(file: PermutermIndexFile) extends Fiber
+
+private[oap] case class PermutermFiber(
+    file: PermutermIndexFile, pageOffset: Long, pageLength: Int) extends Fiber
