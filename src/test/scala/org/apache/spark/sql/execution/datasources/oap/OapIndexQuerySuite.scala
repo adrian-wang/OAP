@@ -45,7 +45,7 @@ class OapIndexQuerySuite extends QueryTest with SharedSQLContext with BeforeAndA
 
   test("index integrity") {
       val data: Seq[(Int, String)] =
-        scala.util.Random.shuffle(1 to 300).map{ i => (i, s"this is test $i") }.toSeq
+        scala.util.Random.shuffle(1 to 300).map(i => (i, s"this is test $i")).seq
       data.toDF("key", "value").createOrReplaceTempView("t")
       sql("insert overwrite table oap_test_1 select * from t")
       sql("create oindex index1 on oap_test_1 (a) using bitmap")
@@ -58,7 +58,7 @@ class OapIndexQuerySuite extends QueryTest with SharedSQLContext with BeforeAndA
       assert(dfWithoutIdx.count == dfOriginal.count)
   }
 
-  test("index row boundary") {
+  test("btree index row boundary") {
     val groupSize = 1024 // use a small row group to check boundary.
 
     val testRowId = groupSize - 1
@@ -72,5 +72,18 @@ class OapIndexQuerySuite extends QueryTest with SharedSQLContext with BeforeAndA
       Row(testRowId, s"this is test $testRowId") :: Nil)
 
     sql("drop oindex index1 on oap_test_1")
+  }
+
+  test("permuterm index") {
+    val data: Seq[(Int, String)] =
+      scala.util.Random.shuffle(1 to 20).map(i => (i, s"test$i")).seq
+    data.toDF("key", "value").createOrReplaceTempView("t")
+    sql("insert overwrite table oap_test_1 select * from t")
+    sql("create oindex index2 on oap_test_1 (b)")
+
+    checkAnswer(sql(s"SELECT * FROM oap_test_1 WHERE b like 'test2%'"),
+      Row(2, s"test2") :: Row(20, s"test20") :: Nil)
+
+    sql("drop oindex index2 on oap_test_1")
   }
 }

@@ -347,7 +347,7 @@ private[oap] case class DataSourceMeta(
     dataReaderClassName: String,
     @transient fileHeader: FileHeader) extends Serializable {
 
-    def isSupportedByIndex(exp: Expression, requirements: Option[IndexType] = None): Boolean = {
+  def isSupportedByIndex(exp: Expression, requirements: Option[IndexType] = None): Boolean = {
     var attr: String = null
     def checkInMetaSet(attrRef: AttributeReference): Boolean = {
       if (attr ==  null || attr == attrRef.name) {
