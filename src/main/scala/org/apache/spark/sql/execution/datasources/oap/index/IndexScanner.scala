@@ -145,11 +145,13 @@ private[oap] object DUMMY_SCANNER extends IndexScanner(null) {
 private[oap] object ScannerBuilder extends Logging {
 
   type IntervalArrayMap = mutable.HashMap[String, ArrayBuffer[RangeInterval]]
+  type PatternArrayMap = mutable.HashMap[String, ArrayBuffer[SearchPattern]]
 
-  def combineIntervalMaps(leftMap: IntervalArrayMap,
-                          rightMap: IntervalArrayMap,
-                          ic: IndexContext,
-                          needMerge: Boolean): IntervalArrayMap = {
+  def combineIntervalMaps(
+      leftMap: IntervalArrayMap,
+      rightMap: IntervalArrayMap,
+      ic: IndexContext,
+      needMerge: Boolean): IntervalArrayMap = {
 
     for ((attribute, intervals) <- rightMap) {
       if (leftMap.contains(attribute)) {
@@ -171,8 +173,8 @@ private[oap] object ScannerBuilder extends Logging {
     leftMap
   }
 
-  def optimizeFilterBound(filter: Filter, ic: IndexContext)
-  : mutable.HashMap[String, ArrayBuffer[RangeInterval]] = {
+  def optimizeFilterBound(
+      filter: Filter, ic: IndexContext): mutable.HashMap[String, ArrayBuffer[RangeInterval]] = {
     filter match {
       case And(leftFilter, rightFilter) =>
         val leftMap = optimizeFilterBound(leftFilter, ic)
@@ -206,6 +208,36 @@ private[oap] object ScannerBuilder extends Logging {
         val ranger =
           new RangeInterval(IndexScanner.DUMMY_KEY_START, IndexScanner.DUMMY_KEY_END, true, true)
         mutable.HashMap(attribute -> ArrayBuffer(ranger))
+      case _ => mutable.HashMap.empty
+    }
+  }
+
+  def combinePatternAnd(
+      left: PatternArrayMap,
+      right: PatternArrayMap): PatternArrayMap = {
+    throw new NotImplementedError("TODO")
+  }
+
+  def combinePatternOr(
+      left: PatternArrayMap,
+      right: PatternArrayMap): PatternArrayMap = {
+    throw new NotImplementedError("TODO")
+  }
+
+  def optimizeFilterPattern(
+      filter: Filter): mutable.HashMap[String, ArrayBuffer[SearchPattern]] = {
+    filter match {
+      case And(leftFilter, rightFilter) =>
+        val left = optimizeFilterPattern(leftFilter)
+        val right = optimizeFilterPattern(rightFilter)
+        combinePatternAnd(left, right)
+      case Or(leftFilter, rightFilter) =>
+        val left = optimizeFilterPattern(leftFilter)
+        val right = optimizeFilterPattern(rightFilter)
+        combinePatternOr(left, right)
+      case StringStartsWith(attribute, prefix) =>
+        val pattern = new SearchPattern(prefix, null, null, null, valid = true)
+        mutable.HashMap(attribute -> ArrayBuffer(pattern))
       case _ => mutable.HashMap.empty
     }
   }
@@ -249,4 +281,27 @@ private[oap] object ScannerBuilder extends Logging {
     filters.filterNot(canSupport(_, ic))
   }
 
+  // return whether a Filter predicate can be supported by our current work
+  def canSupportPattern(filter: Filter, ic: IndexContext): Boolean = {
+    filter match {
+      case StringStartsWith(ic(indexer), _) => true
+      case Or(ic(indexer), _) => true
+      case And(ic(indexer), _) => true
+      case _ => false
+    }
+  }
+
+  def buildPatternScanner(filters: Array[Filter], ic: IndexContext): Array[Filter] = {
+    if (filters == null || filters.isEmpty) return filters
+
+    val patternMapArray = filters.map(optimizeFilterPattern)
+    // TODO combine again
+    val patternMap = patternMapArray.head
+
+    ic.selectAvailableIndexForPattern(patternMap)
+    val (num, idxMeta) = ic.getBestIndexer(patternMap.size)
+    ic.buildPatternScanner(num, idxMeta, intervalMap)
+
+    filters.filterNot(canSupportPattern(_, ic))
+  }
 }

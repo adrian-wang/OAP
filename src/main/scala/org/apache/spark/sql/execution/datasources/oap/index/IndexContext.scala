@@ -51,8 +51,8 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
     scanner = null
   }
 
-  def selectAvailableIndex(intervalMap: mutable.HashMap[String, ArrayBuffer[RangeInterval]])
-  : Unit = {
+  def selectAvailableIndex(
+      intervalMap: mutable.HashMap[String, ArrayBuffer[RangeInterval]]): Unit = {
     logDebug("Selecting Available Index:")
     var idx = 0
     while (idx < meta.indexMetas.length) {
@@ -83,18 +83,37 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
           } // end for
           if (flag == 1) num += 1
           if (num>0) {
-            availableIndexes.append( (num-1, meta.indexMetas(idx)) )
+            availableIndexes.append((num-1, meta.indexMetas(idx)))
           }
         case BitMapIndex(entries) =>
           for (entry <- entries) {
             if (intervalMap.contains(meta.schema(entry).name)) {
-              availableIndexes.append((entries.indexOf(entry), meta.indexMetas(idx)) )
+              availableIndexes.append((entries.indexOf(entry), meta.indexMetas(idx)))
             }
           }
         case other => // TODO support other types of index
       }
       idx += 1
     } // end while
+    availableIndexes.foreach(indices =>
+      logDebug("\t" + indices._2.toString + "; lastIdx: " + indices._1))
+  }
+
+  def selectAvailableIndexForPattern(
+      patternMap: mutable.HashMap[String, ArrayBuffer[SearchPattern]]): Unit = {
+    logDebug("Selecting Available Index:")
+    var idx = 0
+    while (idx < meta.indexMetas.length) {
+      meta.indexMetas(idx).indexType match {
+        case BTreeIndex(entries) if entries.length == 1 =>
+          val attribute = meta.schema(entries.head.ordinal).name
+          if (patternMap.contains(attribute)) {
+            availableIndexes.append((0, meta.indexMetas(idx)) )
+          }
+        case other => // TODO support other types of index
+      }
+      idx += 1
+    }
     availableIndexes.foreach(indices =>
       logDebug("\t" + indices._2.toString + "; lastIdx: " + indices._1))
   }
@@ -145,8 +164,9 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
     (lastIdx, bestIndexer)
   }
 
-  def buildScanner(lastIdx: Int, bestIndexer: IndexMeta, intervalMap:
-  mutable.HashMap[String, ArrayBuffer[RangeInterval]]): Unit = {
+  def buildScanner(
+      lastIdx: Int, bestIndexer: IndexMeta,
+      intervalMap: mutable.HashMap[String, ArrayBuffer[RangeInterval]]): Unit = {
     //    intervalArray.sortWith(compare)
     logDebug("Building Index Scanner with IndexMeta and IntervalMap ...")
 
@@ -203,6 +223,28 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
           logDebug("Bitmap index only supports equal query.")
           scanner.intervalArray = singleValueIntervalArray
         }
+      case _ =>
+    }
+
+    if (scanner != null && keySchema != null) {
+      logDebug("Index Scanner Intervals: " + scanner.intervalArray.mkString(", "))
+      scanner.withKeySchema(keySchema)
+    }
+  }
+
+  def buildPatternScanner(
+      lastIdx: Int, bestIndexer: IndexMeta,
+      patternMap: mutable.HashMap[String, ArrayBuffer[SearchPattern]]): Unit = {
+    //    intervalArray.sortWith(compare)
+    logDebug("Building Index Scanner with IndexMeta and IntervalMap ...")
+
+    if (lastIdx == -1 && bestIndexer == null) return
+    var keySchema: StructType = null
+    bestIndexer.indexType match {
+      case BTreeIndex(entries) if entries.length == 1 =>
+        keySchema = new StructType().add(meta.schema(entries(lastIdx).ordinal))
+        scanner = new BPlusTreePatternScanner(bestIndexer)
+        scanner.patternArray = patternMap(attribute)
       case _ =>
     }
 

@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution.datasources.oap.index
 
 import sun.nio.ch.DirectBuffer
-
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.oap._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 private[oap] object CurrentKey {
@@ -210,7 +210,7 @@ private[oap] class CurrentKey(node: IndexNode, keyIdx: Int, valueIdx: Int, index
   def isEnd: Boolean = currentNode == null || currentKey == IndexScanner.DUMMY_KEY_END
 }
 
-private [oap] class RangeInterval(s: Key, e: Key, includeStart: Boolean, includeEnd: Boolean)
+private[oap] class RangeInterval(s: Key, e: Key, includeStart: Boolean, includeEnd: Boolean)
   extends Serializable {
   var start = s
   var end = e
@@ -218,7 +218,12 @@ private [oap] class RangeInterval(s: Key, e: Key, includeStart: Boolean, include
   var endInclude = includeEnd
 }
 
-private [oap] object RangeInterval{
+private[oap] object RangeInterval{
   def apply(s: Key, e: Key, includeStart: Boolean, includeEnd: Boolean): RangeInterval
   = new RangeInterval(s, e, includeStart, includeEnd)
 }
+
+private[oap] case class SearchPattern(
+    start: String, end: String,
+    contain: String, pattern: String,
+    valid: Boolean = true) extends Serializable

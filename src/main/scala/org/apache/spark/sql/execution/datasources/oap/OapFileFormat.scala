@@ -132,7 +132,7 @@ private[sql] class OapFileFormat extends FileFormat
           + m.dataReaderClassName.substring(m.dataReaderClassName.lastIndexOf(".") + 1)
           + " ...")
 
-        def canTriggerIndex(filter: Filter): Boolean = {
+        def canTriggerIndexWithRange(filter: Filter): Boolean = {
           var attr: String = null
           def checkAttribute(filter: Filter): Boolean = filter match {
             case Or(left, right) =>
@@ -150,6 +150,21 @@ private[sql] class OapFileFormat extends FileFormat
             case GreaterThanOrEqual(attribute, _) =>
               if (attr ==  null || attr == attribute) {attr = attribute; true} else false
             case In(attribute, _) =>
+              if (attr ==  null || attr == attribute) {attr = attribute; true} else false
+            case _ => true
+          }
+
+          checkAttribute(filter)
+        }
+
+        def canTriggerIndexWithPattern(filter: Filter): Boolean = {
+          var attr: String = null
+          def checkAttribute(filter: Filter): Boolean = filter match {
+            case Or(left, right) =>
+              checkAttribute(left) && checkAttribute(right)
+            case And(left, right) =>
+              checkAttribute(left) && checkAttribute(right)
+            case StringStartsWith(attribute, _) =>
               if (attr ==  null || attr == attribute) {attr = attribute; true} else false
             case _ => true
           }
@@ -223,15 +238,23 @@ private[sql] class OapFileFormat extends FileFormat
 
         if (m.indexMetas.nonEmpty) { // check and use index
           logDebug("Supported Filters by Oap:")
-          // filter out the "filters" on which we can use index
-          val supportFilters = filters.toArray.filter(canTriggerIndex)
+          // filter out the "filters" on which we can use index with range
+          val supportFiltersWithRange = filters.toArray.filter(canTriggerIndexWithRange)
+          // filter out the "filters" on which we can use index with pattern
+          val supportFiltersWithPattern = filters.toArray.filter(canTriggerIndexWithPattern)
           // After filtered, supportFilter only contains:
           // 1. Or predicate that contains only one attribute internally;
           // 2. Some atomic predicates, such as LessThan, EqualTo, etc.
-          if (supportFilters.nonEmpty) {
+          if (supportFiltersWithRange.nonEmpty) {
             // determine whether we can use index
-            supportFilters.foreach(filter => logDebug("\t" + filter.toString))
-            ScannerBuilder.build(supportFilters, ic)
+            logDebug("range scan")
+            supportFiltersWithRange.foreach(filter => logDebug("\t" + filter.toString))
+            ScannerBuilder.build(supportFiltersWithRange, ic)
+          } else if (supportFiltersWithPattern.nonEmpty) {
+            // determine whether we can use index
+            logDebug("pattern scan")
+            supportFiltersWithPattern.foreach(filter => logDebug("\t" + filter.toString))
+            ScannerBuilder.buildPatternScanner(supportFiltersWithPattern, ic)
           }
         }
 
