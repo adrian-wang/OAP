@@ -25,15 +25,21 @@ import org.apache.spark.sql.execution.datasources.oap.filecache._
 
 // we scan the index from the smallest to the largest,
 // this will scan the B+ Tree (index) leaf node.
-private[oap] class BPlusTreeScanner(idxMeta: IndexMeta) extends IndexScanner(idxMeta) {
+private[oap] abstract class BPlusTreeScanner(idxMeta: IndexMeta) extends IndexScanner(idxMeta) {
   override def canBeOptimizedByStatistics: Boolean = true
-  override def toString(): String = "BPlusTreeScanner"
-  @transient protected var currentKeyArray: Array[CurrentKey] = _
 
   var currentKeyIdx = 0
   var indexFiber: IndexFiber = _
   var indexData: CacheResult = _
   var recordReader: BTreeIndexRecordReader = _
+
+  override def hasNext: Boolean = recordReader.hasNext
+
+  override def next(): Long = recordReader.next()
+}
+
+private[oap] class BPlusTreeRangeScanner(idxMeta: IndexMeta) extends BPlusTreeScanner(idxMeta) {
+  override def toString(): String = "BPlusTreeRangeScanner"
 
   def initialize(dataPath: Path, conf: Configuration): IndexScanner = {
     assert(keySchema ne null)
@@ -42,12 +48,24 @@ private[oap] class BPlusTreeScanner(idxMeta: IndexMeta) extends IndexScanner(idx
     logDebug("Loading Index File: " + path)
     logDebug("\tFile Size: " + path.getFileSystem(conf).getFileStatus(path).getLen)
 
-    recordReader = BTreeIndexRecordReader(conf, keySchema)
+    recordReader = BTreeIndexRecordRangeReader(conf, keySchema)
     recordReader.initialize(path, intervalArray)
     this
   }
+}
 
-  override def hasNext: Boolean = recordReader.hasNext
+private[oap] class BPlusTreePatternScanner(idxMeta: IndexMeta) extends BPlusTreeScanner(idxMeta) {
+  override def toString(): String = "BPlusTreePatternScanner"
 
-  override def next(): Long = recordReader.next()
+  def initialize(dataPath: Path, conf: Configuration): IndexScanner = {
+    assert(keySchema ne null)
+    // val root = BTreeIndexCacheManager(dataPath, context, keySchema, meta)
+    val path = IndexUtils.indexFileFromDataFile(dataPath, meta.name, meta.time)
+    logDebug("Loading Index File: " + path)
+    logDebug("\tFile Size: " + path.getFileSystem(conf).getFileStatus(path).getLen)
+
+    recordReader = BTreeIndexRecordPatternReader(conf, keySchema)
+    recordReader.initialize(path, patternArray)
+    this
+  }
 }

@@ -34,8 +34,8 @@ class BTreeIndexScannerSuite extends SparkFunSuite {
   test("test rowOrdering") {
     // Only check Integer is enough. We use [[GenerateOrdering]] to handle different data types.
     val fields = StructField("col1", IntegerType) :: StructField("col2", IntegerType) :: Nil
-    val singleColumnReader = BTreeIndexRecordReader(new Configuration(), StructType(fields.take(1)))
-    val multiColumnReader = BTreeIndexRecordReader(new Configuration(), StructType(fields))
+    val singleColumnReader = BTreeIndexRecordRangeReader(new Configuration(), StructType(fields.take(1)))
+    val multiColumnReader = BTreeIndexRecordRangeReader(new Configuration(), StructType(fields))
     // Compare DUMMY_START
     val x1 = IndexScanner.DUMMY_KEY_START
     val y1 = InternalRow(Int.MinValue)
@@ -72,7 +72,7 @@ class BTreeIndexScannerSuite extends SparkFunSuite {
 
   test("test binarySearch") {
     val schema = StructType(StructField("col1", IntegerType) :: Nil)
-    val reader = BTreeIndexRecordReader(new Configuration(), schema)
+    val reader = BTreeIndexRecordRangeReader(new Configuration(), schema)
     val values = Seq(1, 11, 21, 31, 41, 51, 61, 71, 81, 91)
     def keyAt(idx: Int): InternalRow = InternalRow(values(idx))
     val ordering = GenerateOrdering.create(schema)
@@ -114,7 +114,7 @@ class BTreeIndexScannerSuite extends SparkFunSuite {
     (1 to 300 by 2).map(InternalRow(_)).foreach(writer.write(null, _))
     writer.close(null)
 
-    val reader = BTreeIndexRecordReader(configuration, schema)
+    val reader = BTreeIndexRecordRangeReader(configuration, schema)
     reader.initialize(path, new ArrayBuffer[RangeInterval]())
 
     // DUMMY_START <= x <= DUMMY_END

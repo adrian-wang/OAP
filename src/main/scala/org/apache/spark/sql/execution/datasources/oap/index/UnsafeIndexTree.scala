@@ -224,6 +224,4 @@ private[oap] object RangeInterval{
 }
 
 private[oap] case class SearchPattern(
-    start: String, end: String,
-    contain: String, pattern: String,
-    valid: Boolean = true) extends Serializable
+    pattern: String, valid: Boolean = true) extends Serializable

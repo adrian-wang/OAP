@@ -46,6 +46,7 @@ private[oap] abstract class IndexScanner(idxMeta: IndexMeta)
 
   @transient protected var ordering: Ordering[Key] = _
   var intervalArray: ArrayBuffer[RangeInterval] = _
+  var patternArray: ArrayBuffer[SearchPattern] = _
   protected var keySchema: StructType = _
 
   /**
@@ -215,12 +216,14 @@ private[oap] object ScannerBuilder extends Logging {
   def combinePatternAnd(
       left: PatternArrayMap,
       right: PatternArrayMap): PatternArrayMap = {
+    // merge into 1 pattern if possible, else handle empty
     throw new NotImplementedError("TODO")
   }
 
   def combinePatternOr(
       left: PatternArrayMap,
       right: PatternArrayMap): PatternArrayMap = {
+    // combine as array
     throw new NotImplementedError("TODO")
   }
 
@@ -236,7 +239,7 @@ private[oap] object ScannerBuilder extends Logging {
         val right = optimizeFilterPattern(rightFilter)
         combinePatternOr(left, right)
       case StringStartsWith(attribute, prefix) =>
-        val pattern = new SearchPattern(prefix, null, null, null, valid = true)
+        val pattern = new SearchPattern(prefix, valid = true)
         mutable.HashMap(attribute -> ArrayBuffer(pattern))
       case _ => mutable.HashMap.empty
     }
@@ -300,7 +303,7 @@ private[oap] object ScannerBuilder extends Logging {
 
     ic.selectAvailableIndexForPattern(patternMap)
     val (num, idxMeta) = ic.getBestIndexer(patternMap.size)
-    ic.buildPatternScanner(num, idxMeta, intervalMap)
+    ic.buildPatternScanner(num, idxMeta, patternMap)
 
     filters.filterNot(canSupportPattern(_, ic))
   }

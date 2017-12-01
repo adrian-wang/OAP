@@ -30,35 +30,19 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.io.ChunkedByteBuffer
 
-private[index] case class BTreeIndexRecordReader(
+private[index] case class BTreeIndexRecordRangeReader(
     configuration: Configuration,
-    schema: StructType) extends Iterator[Int] {
-
-  private var internalIterator: Iterator[Int] = _
-
-  import BTreeIndexRecordReader.{BTreeFooter, BTreeRowIdList, BTreeNodeData}
-  private var footer: BTreeFooter = _
-  private var footerFiber: BTreeFiber = _
-  private var footerCache: CacheResult = _
-  private var rowIdList: BTreeRowIdList = _
-  private var rowIdListFiber: BTreeFiber = _
-  private var rowIdListCache: CacheResult = _
-
-  private var reader: BTreeIndexFileReader = _
-
-  private lazy val ordering = GenerateOrdering.create(schema)
-  private lazy val partialOrdering = GenerateOrdering.create(StructType(schema.dropRight(1)))
-
+    schema: StructType) extends BTreeIndexRecordReader(configuration, schema) {
   def initialize(path: Path, intervalArray: ArrayBuffer[RangeInterval]): Unit = {
     reader = BTreeIndexFileReader(configuration, path)
 
     footerFiber = BTreeFiber(() => reader.readFooter(), reader.file.toString, 0, 0)
     footerCache = FiberCacheManager.getOrElseUpdate(footerFiber, configuration)
-    footer = BTreeFooter(footerCache.buffer)
+    footer = BTreeIndexRecordReader.BTreeFooter(footerCache.buffer)
 
     rowIdListFiber = BTreeFiber(() => reader.readRowIdList(), reader.file.toString, 1, 0)
     rowIdListCache = FiberCacheManager.getOrElseUpdate(rowIdListFiber, configuration)
-    rowIdList = BTreeRowIdList(rowIdListCache.buffer)
+    rowIdList = BTreeIndexRecordReader.BTreeRowIdList(rowIdListCache.buffer)
 
     internalIterator = intervalArray.toIterator.flatMap { interval =>
       val (start, end) = findRowIdRange(interval)
@@ -66,7 +50,7 @@ private[index] case class BTreeIndexRecordReader(
     }
   }
 
-  private[index] def findRowIdRange(interval: RangeInterval): (Int, Int) = {
+  def findRowIdRange(interval: RangeInterval): (Int, Int) = {
     val (nodeIdxForStart, isStartFound) = findNodeIdx(interval.start, isStart = true)
     val (nodeIdxForEnd, isEndFound) = findNodeIdx(interval.end, isStart = false)
 
@@ -89,8 +73,73 @@ private[index] case class BTreeIndexRecordReader(
       (start, end)
     }
   }
+}
 
-  private def findRowIdPos(
+private[index] case class BTreeIndexRecordPatternReader(
+    configuration: Configuration,
+    schema: StructType) extends BTreeIndexRecordReader(configuration, schema) {
+  def initialize(path: Path, patternArray: ArrayBuffer[SearchPattern]): Unit = {
+    reader = BTreeIndexFileReader(configuration, path)
+
+    footerFiber = BTreeFiber(() => reader.readFooter(), reader.file.toString, 0, 0)
+    footerCache = FiberCacheManager.getOrElseUpdate(footerFiber, configuration)
+    footer = BTreeIndexRecordReader.BTreeFooter(footerCache.buffer)
+
+    rowIdListFiber = BTreeFiber(() => reader.readRowIdList(), reader.file.toString, 1, 0)
+    rowIdListCache = FiberCacheManager.getOrElseUpdate(rowIdListFiber, configuration)
+    rowIdList = BTreeIndexRecordReader.BTreeRowIdList(rowIdListCache.buffer)
+
+    internalIterator = patternArray.toIterator.flatMap { pattern =>
+      val (start, end) = findRowIdRange(pattern)
+      (start until end).toIterator.map(rowIdList.getRowId)
+    }
+  }
+
+  def findRowIdRange(pattern: SearchPattern): (Int, Int) = {
+    val (nodeIdxForStart, isStartFound) = findNodeIdx(pattern.pattern, isStart = true)
+    val (nodeIdxForEnd, isEndFound) = findNodeIdx(interval.end, isStart = false)
+
+    val recordCount = footer.getRecordCount
+    if (nodeIdxForStart == nodeIdxForEnd && !isStartFound && !isEndFound) {
+      (0, 0)
+    } else {
+      val start = if (interval.start == IndexScanner.DUMMY_KEY_START) 0
+      else {
+        nodeIdxForStart.map { idx =>
+          findRowIdPos(idx, interval.start, isStart = true, !interval.startInclude)
+        }.getOrElse(recordCount)
+      }
+      val end = if (interval.end == IndexScanner.DUMMY_KEY_END) recordCount
+      else {
+        nodeIdxForEnd.map { idx =>
+          findRowIdPos(idx, interval.end, isStart = false, interval.endInclude)
+        }.getOrElse(recordCount)
+      }
+      (start, end)
+    }
+  }
+}
+
+private[index] class BTreeIndexRecordReader(
+    configuration: Configuration,
+    schema: StructType) extends Iterator[Int] {
+
+  protected var internalIterator: Iterator[Int] = _
+
+  import BTreeIndexRecordReader.{BTreeFooter, BTreeRowIdList, BTreeNodeData}
+  protected var footer: BTreeFooter = _
+  protected var footerFiber: BTreeFiber = _
+  protected var footerCache: CacheResult = _
+  protected var rowIdList: BTreeRowIdList = _
+  protected var rowIdListFiber: BTreeFiber = _
+  protected var rowIdListCache: CacheResult = _
+
+  protected var reader: BTreeIndexFileReader = _
+
+  private lazy val ordering = GenerateOrdering.create(schema)
+  private lazy val partialOrdering = GenerateOrdering.create(StructType(schema.dropRight(1)))
+
+  protected def findRowIdPos(
       nodeIdx: Int,
       candidate: InternalRow,
       isStart: Boolean,
@@ -140,7 +189,7 @@ private[index] case class BTreeIndexRecordReader(
    * @param isStart to indicate if the candidate is interval.start or interval.end
    * @return Option of Node index and if candidate falls in node (means min <= candidate < max)
    */
-  private def findNodeIdx(candidate: InternalRow, isStart: Boolean): (Option[Int], Boolean) = {
+  protected def findNodeIdx(candidate: InternalRow, isStart: Boolean): (Option[Int], Boolean) = {
     val idxOption = (0 until footer.getNodesCount).find { idx =>
       rowOrdering(candidate, footer.getMaxValue(idx, schema), isStart) <= 0
     }
