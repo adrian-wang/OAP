@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.datasources.oap.utils.NonNullKeyReader
 
 private[oap] case class BitMapScanner(idxMeta: IndexMeta) extends IndexScanner(idxMeta) {
 
-  override def canBeOptimizedByStatistics: Boolean = true
+  override def canBeOptimizedByStatistics: Boolean = false
 
   // TODO: use hash instead of order compare.
   @transient protected var ordering: Ordering[Key] = _
