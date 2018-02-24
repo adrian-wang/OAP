@@ -36,6 +36,19 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
 
   private var currentPath: String = _
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    // In this suite we don't want to skip index even if the cost is higher.
+    spark.sqlContext.setConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION, false)
+  }
+
+  override def afterAll(): Unit = {
+    spark.sqlContext.setConf(
+      OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION,
+      OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.defaultValue.getOrElse(true))
+    super.afterAll()
+  }
+
   override def beforeEach(): Unit = {
     val path = Utils.createTempDir().getAbsolutePath
     currentPath = path
