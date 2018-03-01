@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.oap
 
+import org.apache.spark.sql.internal.oap.OapConf
+import org.apache.spark.sql.types.{StringType, IntegerType, StructField, StructType}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{QueryTest, Row}
@@ -46,18 +48,18 @@ class OapIndexQuerySuite extends QueryTest with SharedOapContext with BeforeAndA
   }
 
   test("index integrity") {
-      val data: Seq[(Int, String)] =
-        scala.util.Random.shuffle(1 to 300).map{ i => (i, s"this is test $i") }
-      data.toDF("key", "value").createOrReplaceTempView("t")
-      sql("insert overwrite table oap_test_1 select * from t")
-      sql("create oindex index1 on oap_test_1 (a) using bitmap")
+    val data: Seq[(Int, String)] =
+      scala.util.Random.shuffle(1 to 300).map{ i => (i, s"this is test $i") }
+    data.toDF("key", "value").createOrReplaceTempView("t")
+    sql("insert overwrite table oap_test_1 select * from t")
+    sql("create oindex index1 on oap_test_1 (a) using bitmap")
 
-      val dfwithIdx = sql("SELECT * FROM oap_test_1 WHERE a > 8 and a <= 200")
-      sql("drop oindex index1 on oap_test_1")
-      val dfWithoutIdx = sql("SELECT * FROM oap_test_1 WHERE a > 8 and a <= 200")
-      val dfOriginal = sql("SELECT * FROM t WHERE key > 8 and key <= 200")
-      assert(dfWithoutIdx.count == dfwithIdx.count)
-      assert(dfWithoutIdx.count == dfOriginal.count)
+    val dfwithIdx = sql("SELECT * FROM oap_test_1 WHERE a > 8 and a <= 200")
+    sql("drop oindex index1 on oap_test_1")
+    val dfWithoutIdx = sql("SELECT * FROM oap_test_1 WHERE a > 8 and a <= 200")
+    val dfOriginal = sql("SELECT * FROM t WHERE key > 8 and key <= 200")
+    assert(dfWithoutIdx.count == dfwithIdx.count)
+    assert(dfWithoutIdx.count == dfOriginal.count)
   }
 
   test("index row boundary") {
@@ -105,6 +107,26 @@ class OapIndexQuerySuite extends QueryTest with SharedOapContext with BeforeAndA
 
     sql("drop oindex index1 on oap_parquet_test_1")
     sql("drop oindex index1 on oap_test_1")
+  }
 
+  test("#604 bitmap index core dump error") {
+    val rowRDD = spark.sparkContext.parallelize(1 to 31, 3).map(i =>
+      Seq(i % 20, s"this is row $i")).map(Row.fromSeq)
+    val schema =
+      StructType(
+        StructField("a", IntegerType) ::
+          StructField("b", StringType) :: Nil)
+    val df = spark.createDataFrame(rowRDD, schema)
+    df.createOrReplaceTempView("t")
+
+    sql("insert overwrite table oap_test_1 select * from t")
+    sql("create oindex bmidx1 on oap_test_1 (a) using bitmap")
+    sql("create oindex bmidx2 on oap_test_1 (b) using bitmap")
+
+    val df1 = sql("SELECT * FROM oap_test_1 WHERE a = 1")
+    checkAnswer(df1, Row(1, "this is row 1") :: Row(1, "this is row 21") :: Nil)
+
+    sql("drop oindex bmidx1 on oap_test_1")
+    sql("drop oindex bmidx2 on oap_test_1")
   }
 }
