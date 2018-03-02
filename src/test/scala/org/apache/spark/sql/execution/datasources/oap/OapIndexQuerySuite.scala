@@ -121,12 +121,10 @@ class OapIndexQuerySuite extends QueryTest with SharedOapContext with BeforeAndA
 
     sql("insert overwrite table oap_test_1 select * from t")
     sql("create oindex bmidx1 on oap_test_1 (a) using bitmap")
-    sql("create oindex bmidx2 on oap_test_1 (b) using bitmap")
 
     val df1 = sql("SELECT * FROM oap_test_1 WHERE a = 1")
     checkAnswer(df1, Row(1, "this is row 1") :: Row(1, "this is row 21") :: Nil)
 
     sql("drop oindex bmidx1 on oap_test_1")
-    sql("drop oindex bmidx2 on oap_test_1")
   }
 }
