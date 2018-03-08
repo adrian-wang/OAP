@@ -173,6 +173,7 @@ class BTreeIndexScannerSuite extends SharedOapContext {
           IndexScanner.DUMMY_KEY_END,
           includeStart = true,
           includeEnd = true,
+          ignoreTail = false,
           isNull = true)) === (150, 150))
     reader.close()
   }
@@ -197,6 +198,7 @@ class BTreeIndexScannerSuite extends SharedOapContext {
           IndexScanner.DUMMY_KEY_END,
           includeStart = true,
           includeEnd = true,
+          ignoreTail = false,
           isNull = true)) === (150, 155))
     reader.close()
   }
