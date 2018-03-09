@@ -91,8 +91,8 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
           if (flag == 1) {
             num += 1
           }
-          if (num>0) {
-            availableIndexes.append((num-1, indexMeta))
+          if (num > 0) {
+            availableIndexes.append((num - 1, indexMeta))
           }
         case BitMapIndex(entries) =>
           for (entry <- entries) {
