@@ -250,7 +250,8 @@ private[oap] case class BitMapScanner(idxMeta: IndexMeta) extends IndexScanner(i
     startIdxOffset
   }
 
-  private def getBitmapIdx(keySeq: IndexedSeq[InternalRow],
+  private def getBitmapIdx(
+      keySeq: IndexedSeq[InternalRow],
       range: RangeInterval): (Int, Int) = {
     val keyLength = keySeq.length
     val startIdx = if (range.start == IndexScanner.DUMMY_KEY_START) {
@@ -296,8 +297,11 @@ private[oap] case class BitMapScanner(idxMeta: IndexMeta) extends IndexScanner(i
     (startIdx, endIdx)
   }
 
-  private def getDesiredBitmaps(byteCache: FiberCache, position: Int,
-      startIdx: Int, endIdx: Int): IndexedSeq[RoaringBitmap] = {
+  private def getDesiredBitmaps(
+      byteCache: FiberCache,
+      position: Int,
+      startIdx: Int,
+      endIdx: Int): IndexedSeq[RoaringBitmap] = {
     if (byteCache.size() != 0) {
       val bmStream = new BitmapDataInputStream(byteCache)
       bmStream.skipBytes(position)
@@ -425,14 +429,14 @@ private[oap] class BitmapDataInputStream(bitsStream: FiberCache) extends DataInp
  override def readLong(): Long = {
    val curPos = pos
    pos += 8
-   ((bitsStream.getByte(curPos) & 0xFF) << 56) |
-     ((bitsStream.getByte(curPos + 1) & 0xFF) << 48) |
-     ((bitsStream.getByte(curPos + 2) & 0xFF) << 40) |
-     ((bitsStream.getByte(curPos + 3) & 0xFF) << 32) |
-     ((bitsStream.getByte(curPos + 4) & 0xFF) << 24) |
-     ((bitsStream.getByte(curPos + 5) & 0xFF) << 16) |
-     ((bitsStream.getByte(curPos + 6) & 0xFF) << 8) |
-     (bitsStream.getByte(curPos + 7) & 0xFF)
+   ((bitsStream.getByte(curPos) & 0xFF).toLong << 56) |
+     ((bitsStream.getByte(curPos + 1).toLong & 0xFF) << 48) |
+     ((bitsStream.getByte(curPos + 2).toLong & 0xFF) << 40) |
+     ((bitsStream.getByte(curPos + 3).toLong & 0xFF) << 32) |
+     ((bitsStream.getByte(curPos + 4).toLong & 0xFF) << 24) |
+     ((bitsStream.getByte(curPos + 5).toLong & 0xFF) << 16) |
+     ((bitsStream.getByte(curPos + 6).toLong & 0xFF) << 8) |
+     (bitsStream.getByte(curPos + 7).toLong & 0xFF)
  }
 
  override def readFully(readBuffer: Array[Byte], offset: Int, length: Int): Unit = {

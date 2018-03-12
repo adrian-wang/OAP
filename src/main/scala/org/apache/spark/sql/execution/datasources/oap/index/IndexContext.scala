@@ -28,7 +28,6 @@ import org.apache.spark.sql.execution.datasources.oap._
 import org.apache.spark.sql.execution.datasources.oap.index.ScannerBuilder.IntervalArrayMap
 import org.apache.spark.sql.types.StructType
 
-
 private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
   // availableIndexes keeps the available indexes for the current SQL query statement
   // (Int, IndexMeta):
@@ -128,9 +127,10 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
       maxChooseSize: Int = 1): Seq[(Int, IndexMeta)] = {
     logDebug("Get Available Indexers: maxChooseSize = " + maxChooseSize)
 
-    def takeRatioAndUsedFields(attrNum: Int,
-                               idx: Int,
-                               entryNames: Seq[String]): (Double, Seq[String]) = {
+    def takeRatioAndUsedFields(
+        attrNum: Int,
+        idx: Int,
+        entryNames: Seq[String]): (Double, Seq[String]) = {
       val matchedAttr: Double = idx + 1
       // (ratio, usedFields)
       (attrNum / matchedAttr + entryNames.length / matchedAttr, entryNames.take(idx + 1))
@@ -447,7 +447,10 @@ private[oap] class FilterOptimizer(keySchema: StructType) {
 
   // merge two key and their include identifiers
   def intersect(
-      key1: Key, key2: Key, include1: Boolean, include2: Boolean,
+      key1: Key,
+      key2: Key,
+      include1: Boolean,
+      include2: Boolean,
       isEndKey: Boolean): (Key, Boolean) = {
     if (key1 == IndexScanner.DUMMY_KEY_START) {
       (key2, include2)

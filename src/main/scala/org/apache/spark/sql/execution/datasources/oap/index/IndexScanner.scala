@@ -34,7 +34,6 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
-
 private[oap] object IndexScanner {
   val DUMMY_KEY_START: Key = new UnsafeRow() // we compare the ref not the value
   val DUMMY_KEY_END: Key = new UnsafeRow() // we compare the ref not the value
@@ -188,7 +187,6 @@ private[oap] object ScannerBuilder extends Logging {
       rightMap: IntervalArrayMap,
       ic: IndexContext,
       needMerge: Boolean): IntervalArrayMap = {
-
     for ((attribute, intervals) <- rightMap) {
       if (leftMap.contains(attribute)) {
         attribute match {

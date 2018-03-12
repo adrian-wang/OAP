@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.datasources.oap.utils.{FilterHelper, OapUt
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{AtomicType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 private[sql] class OapFileFormat extends FileFormat
@@ -107,12 +107,10 @@ private[sql] class OapFileFormat extends FileFormat
     // TODO: Should we have our own config util instead of SqlConf?
     // First use table option, if not, use SqlConf, else, use default value.
     conf.set(OapFileFormat.COMPRESSION, options.getOrElse("compression",
-        sparkSession.conf.get(OapConf.OAP_COMPRESSION.key,
-          OapFileFormat.DEFAULT_COMPRESSION)))
+      sparkSession.conf.get(OapConf.OAP_COMPRESSION.key, OapFileFormat.DEFAULT_COMPRESSION)))
 
     conf.set(OapFileFormat.ROW_GROUP_SIZE, options.getOrElse("rowgroup",
-      sparkSession.conf.get(OapConf.OAP_ROW_GROUP_SIZE.key,
-      OapFileFormat.DEFAULT_ROW_GROUP_SIZE)))
+      sparkSession.conf.get(OapConf.OAP_ROW_GROUP_SIZE.key, OapFileFormat.DEFAULT_ROW_GROUP_SIZE)))
 
     new OapOutputWriterFactory(
       dataSchema,
@@ -126,8 +124,19 @@ private[sql] class OapFileFormat extends FileFormat
    * Returns whether the reader will return the rows as batch or not.
    */
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
-    // TODO we should naturelly support batch
-    false
+    // TODO remove readerClassName after oap support batch return
+    val readerClassName = meta match {
+      case Some(m) =>
+        m.dataReaderClassName
+      case _ => ""
+    }
+    val conf = sparkSession.sessionState.conf
+    // TODO modify conditions after oap support batch return
+    readerClassName.equals(OapFileFormat.PARQUET_DATA_FILE_CLASSNAME) &&
+      conf.parquetVectorizedReaderEnabled &&
+      conf.wholeStageEnabled &&
+      schema.length <= conf.wholeStageMaxNumFields &&
+      schema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
   override def isSplitable(
@@ -142,8 +151,7 @@ private[sql] class OapFileFormat extends FileFormat
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String],
-      hadoopConf: Configuration
-  ): PartitionedFile => Iterator[InternalRow] = {
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     // TODO we need to pass the extra data source meta information via the func parameter
     meta match {
       case Some(m) =>
@@ -277,6 +285,15 @@ private[sql] class OapFileFormat extends FileFormat
         val requiredIds = requiredSchema.map(dataSchema.fields.indexOf(_)).toArray
         val pushed = FilterHelper.tryToPushFilters(sparkSession, requiredSchema, filters)
 
+        // refer to ParquetFileFormat, use resultSchema to decide if this query support
+        // Vectorized Read and returningBatch.
+        val resultSchema = StructType(partitionSchema.fields ++ requiredSchema.fields)
+        val enableVectorizedReader: Boolean =
+          m.dataReaderClassName.equals(OapFileFormat.PARQUET_DATA_FILE_CLASSNAME) &&
+          sparkSession.sessionState.conf.parquetVectorizedReaderEnabled &&
+          resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
+        val returningBatch = supportBatch(sparkSession, resultSchema)
+
         val broadcastedHadoopConf =
           sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
@@ -304,17 +321,31 @@ private[sql] class OapFileFormat extends FileFormat
             case _ =>
               OapIndexInfo.partitionOapIndex.put(file.filePath, false)
               FilterHelper.setFilterIfExist(conf, pushed)
+              // if enableVectorizedReader == true, init VectorizedContext,
+              // else context is None.
+              val context = if (enableVectorizedReader) {
+                Some(VectorizedContext(partitionSchema,
+                  file.partitionValues, returningBatch))
+              } else {
+                None
+              }
               val reader = new OapDataReader(
-                new Path(new URI(file.filePath)), m, filterScanners, requiredIds)
+                new Path(new URI(file.filePath)), m, filterScanners, requiredIds, context)
               val iter = reader.initialize(conf, options)
               Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
               oapMetrics.updateIndexAndRowRead(reader, totalRows)
+              // if enableVectorizedReader == true, return iter directly because of partitionValues
+              // already filled by VectorizedReader, else use original branch.
+              if (enableVectorizedReader) {
+                iter
+              } else {
+                val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+                val joinedRow = new JoinedRow()
+                val appendPartitionColumns =
+                  GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
-              val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-              val joinedRow = new JoinedRow()
-              val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
-
-              iter.map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+                iter.map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+              }
           }
         }
       case None => (_: PartitionedFile) => {
@@ -457,7 +488,9 @@ private[oap] class OapOutputWriterFactory(
 
 
 private[oap] case class OapWriteResult(
-    fileName: String, rowsWritten: Int, partitionString: String)
+    fileName: String,
+    rowsWritten: Int,
+    partitionString: String)
 
 private[oap] class OapOutputWriter(
     path: String,
@@ -465,9 +498,11 @@ private[oap] class OapOutputWriter(
     context: TaskAttemptContext) extends OutputWriter {
   private var rowCount = 0
   private var partitionString: String = ""
+
   override def setPartitionString(ps: String): Unit = {
     partitionString = ps
   }
+
   private val writer: OapDataWriter = {
     val isCompressed = FileOutputFormat.getCompressOutput(context)
     val conf = context.getConfiguration
@@ -479,6 +514,7 @@ private[oap] class OapOutputWriter(
   }
 
   override def write(row: Row): Unit = throw new NotImplementedError("write(row: Row)")
+
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
     rowCount += 1
     writer.write(row)
@@ -524,9 +560,9 @@ private[sql] object OapFileFormat {
   val OAP_INDEX_GROUP_BY_OPTION_KEY = "oap.scan.index.group"
 
   val oapOptimizationKeySeq : Seq[String] = {
-      OAP_QUERY_ORDER_OPTION_KEY ::
-      OAP_QUERY_LIMIT_OPTION_KEY ::
-      OAP_INDEX_SCAN_NUM_OPTION_KEY ::
-      OAP_INDEX_GROUP_BY_OPTION_KEY :: Nil
+    OAP_QUERY_ORDER_OPTION_KEY ::
+    OAP_QUERY_LIMIT_OPTION_KEY ::
+    OAP_INDEX_SCAN_NUM_OPTION_KEY ::
+    OAP_INDEX_GROUP_BY_OPTION_KEY :: Nil
   }
 }
