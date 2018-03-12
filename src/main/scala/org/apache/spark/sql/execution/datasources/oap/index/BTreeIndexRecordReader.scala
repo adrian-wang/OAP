@@ -108,7 +108,7 @@ private[index] case class BTreeIndexRecordReader(
         }
       val end =
         if (interval.end == IndexScanner.DUMMY_KEY_END) {
-         recordCount
+          recordCount
         } else {
           nodeIdxForEnd.map { idx =>
             findRowIdPos(idx, interval.end, isStart = false, interval.endInclude, compareFunc)
@@ -180,7 +180,8 @@ private[index] case class BTreeIndexRecordReader(
    * @return Option of Node index and if candidate falls in node (means min <= candidate < max)
    */
   private def findNodeIdx(
-      candidate: InternalRow, isStart: Boolean,
+      candidate: InternalRow,
+      isStart: Boolean,
       compareFunc: CompareFunction = rowOrdering): Option[Int] = {
     if (isStart) {
       (0 until footer.getNodesCount).find { idx =>
