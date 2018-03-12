@@ -221,33 +221,20 @@ private[index] case class BTreeIndexRecordReader(
   /**
    * like [[rowOrdering]], but x should always from interval.start or interval.end for pattern,
    * while y should be the other one from index records.
-   * Here when x.numFields > y.numFields, that means we will not use pattern match, because pattern
-   * column is not included; if x.numFields < y.numFields, that means only use first several cols
-   * of this index
    */
   private[index] def rowOrderingPattern(x: InternalRow, y: InternalRow, isStart: Boolean): Int = {
     // Note min/max == null has been handled elsewhere
-    if (x.numFields == y.numFields) {
-      if (x.numFields > 1) {
-        val partialRes = partialOrdering.compare(x, y)
-        if (partialRes != 0) {
-          return partialRes
-        }
+    // For pattern match queries, there is no dummy end and dummy start
+    assert(x.numFields == y.numFields)
+    if (x.numFields > 1) {
+      val partialRes = partialOrdering.compare(x, y)
+      if (partialRes != 0) {
+        return partialRes
       }
-      val xStr = x.getString(schema.length - 1)
-      val yStr = y.getString(schema.length - 1)
-      if (strMatching(xStr, yStr)) 0 else xStr.compare(yStr)
-    } else if (x.numFields < y.numFields) {
-      if (schema.length > 2) {
-        // TODO this ensures x.numFields == 1, should support > 1 later
-        throw new NotImplementedError("Too many index cols for pattern matching query!")
-      }
-      val xStr = x.getString(x.numFields - 1)
-      val yStr = y.getString(x.numFields - 1)
-      if (strMatching(xStr, yStr)) 0 else xStr.compare(yStr)
-    } else {
-      rowOrdering(x, y, isStart)
     }
+    val xStr = x.getString(schema.length - 1)
+    val yStr = y.getString(schema.length - 1)
+    if (strMatching(xStr, yStr)) 0 else xStr.compare(yStr)
   }
 
   private[index] def strMatching(xStr: String, yStr: String): Boolean = yStr.startsWith(xStr)
