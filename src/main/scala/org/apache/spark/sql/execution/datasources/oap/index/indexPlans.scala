@@ -26,7 +26,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes._
 import org.apache.spark.sql.catalyst.expressions._
@@ -149,6 +149,19 @@ case class CreateIndexCommand(
     partitionSpec.getOrElse(Map.empty).foreach { case (k, v) =>
       ds = ds.filter(s"$k='$v'")
     }
+    ds = ds.queryExecution.executedPlan.execute().mapPartitionsInternal(r =>
+      new Iterator[InternalRow] {
+        @transient private var localCnt = 0
+        @transient private val joinedRow = new JoinedRow
+        override def hasNext: Boolean = r.hasNext
+        override def next(): InternalRow = {
+          val ret = joinedRow(r.next(), InternalRow(localCnt))
+          localCnt += 1
+          ret
+        }
+      }
+    ).zipWithIndex()
+    ds = ds.sortWithinPartitions(Column(InputFileName()) +: projectList.map(Column.apply): _*)
 
     val outPutPath = fileCatalog.rootPaths.head
     assert(outPutPath != null, "Expected exactly one path to be specified, but no value")

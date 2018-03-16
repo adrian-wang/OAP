@@ -35,7 +35,6 @@ import org.apache.spark.sql.execution.datasources.oap.statistics.StatisticsWrite
 import org.apache.spark.sql.execution.datasources.oap.utils.{BTreeNode, BTreeUtils, NonNullKeyWriter}
 import org.apache.spark.sql.types._
 
-
 private[index] case class BTreeIndexRecordWriter(
     configuration: Configuration,
     fileWriter: BTreeIndexFileWriter,
