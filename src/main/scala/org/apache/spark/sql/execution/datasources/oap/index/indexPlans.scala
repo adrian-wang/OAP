@@ -23,14 +23,18 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.ml.attribute.UnresolvedAttribute
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.oap._
@@ -149,19 +153,28 @@ case class CreateIndexCommand(
     partitionSpec.getOrElse(Map.empty).foreach { case (k, v) =>
       ds = ds.filter(s"$k='$v'")
     }
-    ds = ds.queryExecution.executedPlan.execute().mapPartitionsInternal(r =>
-      new Iterator[InternalRow] {
-        @transient private var localCnt = 0
-        @transient private val joinedRow = new JoinedRow
-        override def hasNext: Boolean = r.hasNext
-        override def next(): InternalRow = {
-          val ret = joinedRow(r.next(), InternalRow(localCnt))
-          localCnt += 1
-          ret
-        }
+    val tempDs = ds
+    def alias(expr: Expression): NamedExpression = expr match {
+      case u: UnresolvedAttribute => UnresolvedAlias(u)
+      case expr: NamedExpression => expr
+      case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
+        UnresolvedAlias(a, Some(Column.generateAlias))
+      case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
+    }
+    ds = ds.mapPartitions(iter => new Iterator[Row] {
+      private var localCnt = 0
+      override def hasNext: Boolean = iter.hasNext
+      override def next(): Row = {
+        val ret = Row(iter.next, localCnt)
+        localCnt += 1
+        ret
       }
-    ).zipWithIndex()
-    ds = ds.sortWithinPartitions(Column(InputFileName()) +: projectList.map(Column.apply): _*)
+    }).toDF("row", "cnt")
+    val groupingExprs: Seq[Expression] = InputFileName() :: UnresolvedAttribute("row") :: Nil
+    val aggExprs =
+      Seq(Alias(CollectSet(UnresolvedAttribute("cnt")).toAggregateExpression(), "ids")())
+    ds = Dataset.ofRows(sparkSession, Aggregate(
+      groupingExprs, (groupingExprs ++ aggExprs).map(alias), ds.logicalPlan))
 
     val outPutPath = fileCatalog.rootPaths.head
     assert(outPutPath != null, "Expected exactly one path to be specified, but no value")
@@ -184,18 +197,33 @@ case class CreateIndexCommand(
       "indexType" -> indexType.toString
     )
 
-    val retVal = FileFormatWriter.write(
-      sparkSession = sparkSession,
-      queryExecution = ds.queryExecution,
-      fileFormat = new OapIndexFileFormat,
-      committer = committer,
-      outputSpec = FileFormatWriter.OutputSpec(
-        qualifiedOutputPath.toUri.getPath, Map.empty),
-      hadoopConf = configuration,
-      partitionColumns = Seq.empty,
-      bucketSpec = Option.empty,
-      refreshFunction = _ => Unit,
-      options = options).asInstanceOf[Seq[Seq[IndexBuildResult]]]
+    val retVal = if (indexType == BTreeIndexType) {
+      FileFormatWriter.write(
+        sparkSession = sparkSession,
+        queryExecution = ds.queryExecution,
+        fileFormat = new OapIndexFileFormat,
+        committer = committer,
+        outputSpec = FileFormatWriter.OutputSpec(
+          qualifiedOutputPath.toUri.getPath, Map.empty),
+        hadoopConf = configuration,
+        partitionColumns = Seq.empty,
+        bucketSpec = Option.empty,
+        refreshFunction = _ => Unit,
+        options = options).asInstanceOf[Seq[Seq[IndexBuildResult]]]
+    } else {
+      FileFormatWriter.write(
+        sparkSession = sparkSession,
+        queryExecution = tempDs.queryExecution,
+        fileFormat = new OapIndexFileFormat,
+        committer = committer,
+        outputSpec = FileFormatWriter.OutputSpec(
+          qualifiedOutputPath.toUri.getPath, Map.empty),
+        hadoopConf = configuration,
+        partitionColumns = Seq.empty,
+        bucketSpec = Option.empty,
+        refreshFunction = _ => Unit,
+        options = options).asInstanceOf[Seq[Seq[IndexBuildResult]]]
+    }
 
     val retMap = retVal.flatten.groupBy(_.parent)
     bAndP.foreach(bp =>

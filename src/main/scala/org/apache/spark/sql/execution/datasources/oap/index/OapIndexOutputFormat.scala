@@ -57,7 +57,7 @@ private[index] class OapIndexOutputFormat extends FileOutputFormat[Void, Interna
       new DummyIndexRecordWriter()
     } else if (indexType == "BTREE") {
       val writer = BTreeIndexFileWriter(configuration, file)
-      new BTreeIndexRecordWriter(configuration, writer, schema)
+      new BTreeIndexRecordWriter2(configuration, writer, schema)
     } else if (indexType == "BITMAP") {
       val writer = file.getFileSystem(configuration).create(file, true)
       new BitmapIndexRecordWriter(configuration, writer, schema)
