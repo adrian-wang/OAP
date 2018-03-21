@@ -105,11 +105,11 @@ private[oap] class BitmapIndexRecordWriter(
 
   override def write(key: Void, value: InternalRow): Unit = {
     val v = genericProjector(value).copy()
-    def put(bm: RoaringBitmap, value: Int): RoaringBitmap = {
+    def put(bm: RoaringBitmap): RoaringBitmap = {
       bm.add(recordCount)
       bm
     }
-    openHashMap.changeValue(v, put(new RoaringBitmap(), recordCount), put(_, recordCount))
+    openHashMap.changeValue(v, put(new RoaringBitmap()), put)
     if (recordCount == Int.MaxValue) {
       throw new OapException("Cannot support indexing more than 2G rows!")
     }
