@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttrib
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{UnaryNode, LogicalPlan, Aggregate, Project}
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.command.RunnableCommand
@@ -153,7 +153,7 @@ case class CreateIndexCommand(
     partitionSpec.getOrElse(Map.empty).foreach { case (k, v) =>
       ds = ds.filter(s"$k='$v'")
     }
-    val tempDs = ds
+    val oldDs = ds
     def alias(expr: Expression): NamedExpression = expr match {
       case u: UnresolvedAttribute => UnresolvedAlias(u)
       case expr: NamedExpression => expr
@@ -213,7 +213,7 @@ case class CreateIndexCommand(
     } else {
       FileFormatWriter.write(
         sparkSession = sparkSession,
-        queryExecution = tempDs.queryExecution,
+        queryExecution = oldDs.queryExecution,
         fileFormat = new OapIndexFileFormat,
         committer = committer,
         outputSpec = FileFormatWriter.OutputSpec(
@@ -731,4 +731,12 @@ case class OapEnableIndexCommand(indexName: String) extends RunnableCommand {
     sparkSession.conf.set(OapConf.OAP_INDEX_DISABLE_LIST.key, refreshedDisableList.mkString(", "))
     Seq.empty
   }
+}
+
+case class PrepareForIndexBuild(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = StructType(Seq(
+    StructField("_oap_filename", StringType),
+    StructField("_oap_unique_count", IntegerType),
+    StructField("_oap_grouped_keys", MapType(child.output.toStructType, ArrayType(IntegerType)))
+  )).toAttributes
 }
