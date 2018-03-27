@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.oap
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.datasources.oap.index.PrepareForIndexBuild
+import org.apache.spark.sql.execution.datasources.oap.index.{PrepareForIndexBuildExec, PrepareForIndexBuild}
 import org.apache.spark.sql.{execution, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.catalog._
@@ -455,59 +455,28 @@ case class OapAggregationFileScanExec(
 
 object OapPrepareIndexStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PrepareForIndexBuild(childPlan) => childPlan match {
-      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-        val childPlan = calcChildPlan(child, limit, order)
-        TakeOrderedAndProjectExec(limit, order, child.output, childPlan) :: Nil
-      case logical.Limit(
-      IntegerLiteral(limit),
-      logical.Project(projectList, logical.Sort(order, true, child))) =>
-        val childPlan = calcChildPlan(child, limit, order)
-        TakeOrderedAndProjectExec(limit, order, projectList, childPlan) :: Nil
-      case _ =>
-        Nil
+    case PrepareForIndexBuild(childPlan) =>
+      PrepareForIndexBuildExec(planLater(childPlan)) :: Nil
+    case PrepareForIndexBuild(childPlan) => {
+      val childWithRowId = planLater(childPlan) // TODO row id
+      val aggrByFileAndKey = OapAggUtils.createLocalAggregate(
+        groupingExpressions = Nil,
+        aggregateExpressions = Nil,
+        aggregateAttributes = Nil,
+        initialInputBufferOffset = 0,
+        resultExpressions = Nil,
+        child = childWithRowId
+      )
+      val aggrByFile = OapAggUtils.createLocalAggregate(
+        groupingExpressions = Nil,
+        aggregateExpressions = Nil,
+        aggregateAttributes = Nil,
+        initialInputBufferOffset = 0,
+        resultExpressions = Nil,
+        child = aggrByFileAndKey
+      )
+      Seq(aggrByFile)
     }
-    case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-      val childPlan = calcChildPlan(child, limit, order)
-      TakeOrderedAndProjectExec(limit, order, child.output, childPlan) :: Nil
-    case logical.Limit(
-    IntegerLiteral(limit),
-    logical.Project(projectList, logical.Sort(order, true, child))) =>
-      val childPlan = calcChildPlan(child, limit, order)
-      TakeOrderedAndProjectExec(limit, order, projectList, childPlan) :: Nil
     case _ => Nil
-  }
-
-  def calcChildPlan(
-                     child: LogicalPlan,
-                     limit: Int,
-                     order: Seq[SortOrder]): SparkPlan = child match {
-    case PhysicalOperation(projectList, filters,
-    relation @ LogicalRelation(
-    file @ HadoopFsRelation(_, _, _, _, _ : OapFileFormat, _), _, table)) =>
-      val filterAttributes = AttributeSet(ExpressionSet(filters))
-      val orderAttributes = AttributeSet(ExpressionSet(order.map(_.child)))
-      if (orderAttributes.size == 1 && filterAttributes == orderAttributes) {
-        val oapOption = new CaseInsensitiveMap(file.options +
-          (OapFileFormat.OAP_QUERY_LIMIT_OPTION_KEY -> limit.toString) +
-          (OapFileFormat.OAP_QUERY_ORDER_OPTION_KEY -> order.head.isAscending.toString))
-        val indexRequirement = filters.map(_ => BTreeIndex())
-
-        createOapFileScanPlan(
-          projectList,
-          filters,
-          relation,
-          file,
-          table,
-          oapOption,
-          filters,
-          indexRequirement) match {
-          case Some(fastScan) => OapOrderLimitFileScanExec(limit, order, projectList, fastScan)
-          case None => PlanLater(child)
-        }
-      } else {
-        PlanLater(child)
-      }
-    case _ => PlanLater(child)
   }
 }

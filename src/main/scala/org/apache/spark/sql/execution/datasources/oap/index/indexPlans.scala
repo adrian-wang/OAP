@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.oap.index
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -739,4 +742,13 @@ case class PrepareForIndexBuild(child: LogicalPlan) extends UnaryNode {
     StructField("_oap_unique_count", IntegerType),
     StructField("_oap_grouped_keys", MapType(child.output.toStructType, ArrayType(IntegerType)))
   )).toAttributes
+}
+
+case class PrepareForIndexBuildExec(child: SparkPlan) extends UnaryExecNode {
+  override protected def doExecute(): RDD[Key] = {
+    child.execute()
+    ???
+  }
+
+  override def output: Seq[Attribute] = ???
 }
