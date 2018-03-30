@@ -743,12 +743,3 @@ case class PrepareForIndexBuild(child: LogicalPlan) extends UnaryNode {
     StructField("_oap_grouped_keys", MapType(child.output.toStructType, ArrayType(IntegerType)))
   )).toAttributes
 }
-
-case class PrepareForIndexBuildExec(child: SparkPlan) extends UnaryExecNode {
-  override protected def doExecute(): RDD[Key] = {
-    child.execute()
-    ???
-  }
-
-  override def output: Seq[Attribute] = ???
-}

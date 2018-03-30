@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.oap
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.datasources.oap.index.{PrepareForIndexBuildExec, PrepareForIndexBuild}
+import org.apache.spark.sql.types.{StringType, StructField}
 import org.apache.spark.sql.{execution, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.catalog._
@@ -455,28 +456,39 @@ case class OapAggregationFileScanExec(
 
 object OapPrepareIndexStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PrepareForIndexBuild(childPlan) =>
-      PrepareForIndexBuildExec(planLater(childPlan)) :: Nil
-    case PrepareForIndexBuild(childPlan) => {
-      val childWithRowId = planLater(childPlan) // TODO row id
+    case PrepareForIndexBuild(child) =>
+      val filenameCol = Alias(InputFileName(), "_oap_filename")()
+      val childWithRowId = planLater(child) // TODO row id
+      val groupingExpressions = Seq(filenameCol) // TODO add key
+      val groupingAttributes = groupingExpressions.map(_.toAttribute) ++ child.output
+      val partialAggregateExpressions = // TODO use row id in collect list
+        Seq(AggregateExpression.apply(CollectList(InputFileName()), Complete, isDistinct = false))
+      val partialAggregateAttributes =
+        partialAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+      val partialResultExpressions =
+        groupingAttributes ++
+          partialAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+      // aggr by filename and key
       val aggrByFileAndKey = OapAggUtils.createLocalAggregate(
-        groupingExpressions = Nil,
-        aggregateExpressions = Nil,
-        aggregateAttributes = Nil,
-        initialInputBufferOffset = 0,
-        resultExpressions = Nil,
+        groupingExpressions = groupingExpressions,
+        aggregateExpressions = partialAggregateExpressions,
+        aggregateAttributes = partialAggregateAttributes,
+        resultExpressions = partialResultExpressions,
         child = childWithRowId
       )
+      val localSummaryExpressions = // TODO use key in count
+        Seq(AggregateExpression.apply(Count(InputFileName()), Complete, isDistinct = true))
+      val localSummaryAttributes =
+        localSummaryExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+      // aggr by filename only to get distinct count
       val aggrByFile = OapAggUtils.createLocalAggregate(
         groupingExpressions = Nil,
         aggregateExpressions = Nil,
-        aggregateAttributes = Nil,
-        initialInputBufferOffset = 0,
+        aggregateAttributes = localSummaryAttributes,
         resultExpressions = Nil,
         child = aggrByFileAndKey
       )
       Seq(aggrByFile)
-    }
     case _ => Nil
   }
 }

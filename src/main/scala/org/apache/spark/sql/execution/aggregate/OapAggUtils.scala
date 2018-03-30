@@ -58,7 +58,6 @@ object OapAggUtils {
       groupingExpressions: Seq[NamedExpression] = Nil,
       aggregateExpressions: Seq[AggregateExpression] = Nil,
       aggregateAttributes: Seq[Attribute] = Nil,
-      initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
     val useHash = HashAggregateExec.supportsAggregate(
@@ -69,7 +68,7 @@ object OapAggUtils {
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
-        initialInputBufferOffset = initialInputBufferOffset,
+        initialInputBufferOffset = 0,
         resultExpressions = resultExpressions,
         child = child)
     } else {
@@ -78,7 +77,7 @@ object OapAggUtils {
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
-        initialInputBufferOffset = initialInputBufferOffset,
+        initialInputBufferOffset = 0,
         resultExpressions = resultExpressions,
         child = child)
     }
