@@ -19,9 +19,7 @@ package org.apache.spark.sql.execution.datasources.oap
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.datasources.oap.index.{PrepareForIndexBuildExec, PrepareForIndexBuild}
-import org.apache.spark.sql.types.{StringType, StructField}
-import org.apache.spark.sql.{execution, SparkSession, Strategy}
+import org.apache.spark.sql.{execution, Column, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
@@ -34,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.OapAggUtils
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.oap.index.{PrepareForIndexBuild, RowIdScan}
 import org.apache.spark.sql.execution.joins.BuildRight
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.util.Utils
@@ -457,35 +456,45 @@ case class OapAggregationFileScanExec(
 object OapPrepareIndexStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PrepareForIndexBuild(child) =>
-      val filenameCol = Alias(InputFileName(), "_oap_filename")()
-      val childWithRowId = planLater(child) // TODO row id
-      val groupingExpressions = Seq(filenameCol) // TODO add key
-      val groupingAttributes = groupingExpressions.map(_.toAttribute) ++ child.output
-      val partialAggregateExpressions = // TODO use row id in collect list
-        Seq(AggregateExpression.apply(CollectList(InputFileName()), Complete, isDistinct = false))
-      val partialAggregateAttributes =
-        partialAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-      val partialResultExpressions =
-        groupingAttributes ++
-          partialAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+      val childWithRowId = RowIdScan(planLater(child))
+      val groupingExpressionsForLists = childWithRowId.output.slice(0, 2)
+      val groupingAttributesForLists = groupingExpressionsForLists.map(_.toAttribute)
+      val localKeyAggregateExpressions =
+        Seq(AggregateExpression.apply(
+          CollectList(Column("_oap_row_id").expr), Complete, isDistinct = false))
+      val localKeyAggregateAttributes =
+        localKeyAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+      val fileKeyListExpressions =
+        groupingAttributesForLists ++
+          localKeyAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
       // aggr by filename and key
       val aggrByFileAndKey = OapAggUtils.createLocalAggregate(
-        groupingExpressions = groupingExpressions,
-        aggregateExpressions = partialAggregateExpressions,
-        aggregateAttributes = partialAggregateAttributes,
-        resultExpressions = partialResultExpressions,
+        groupingExpressions = groupingExpressionsForLists,
+        aggregateExpressions = localKeyAggregateExpressions,
+        aggregateAttributes = localKeyAggregateAttributes,
+        resultExpressions = fileKeyListExpressions,
         child = childWithRowId
       )
-      val localSummaryExpressions = // TODO use key in count
-        Seq(AggregateExpression.apply(Count(InputFileName()), Complete, isDistinct = true))
+      val groupingExpressionsForSummary =
+        aggrByFileAndKey.output.slice(0, 1) :+ Alias(
+          IsNotNull(aggrByFileAndKey.output(1)), "_oap_null_key")()
+      val groupingAttributesForSummary = groupingExpressionsForSummary.map(_.toAttribute)
+      val localSummaryExpressions =
+        Seq(
+          AggregateExpression.apply(Count(aggrByFileAndKey.output(1)), Complete, isDistinct = true),
+          AggregateExpression.apply(Count(aggrByFileAndKey.output(1)), Complete, isDistinct = true)
+        )
       val localSummaryAttributes =
         localSummaryExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+      val fileCountMapExpressions =
+        groupingAttributesForSummary ++
+          localSummaryExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
       // aggr by filename only to get distinct count
       val aggrByFile = OapAggUtils.createLocalAggregate(
-        groupingExpressions = Nil,
-        aggregateExpressions = Nil,
+        groupingExpressions = groupingExpressionsForSummary,
+        aggregateExpressions = localSummaryExpressions,
         aggregateAttributes = localSummaryAttributes,
-        resultExpressions = Nil,
+        resultExpressions = fileCountMapExpressions,
         child = aggrByFileAndKey
       )
       Seq(aggrByFile)

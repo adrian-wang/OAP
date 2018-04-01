@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.oap.index
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
-import org.apache.spark.ml.attribute.UnresolvedAttribute
+import org.apache.spark.rdd.{InputFileNameHolder, RDD}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.sql._
@@ -35,8 +32,9 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttrib
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet}
-import org.apache.spark.sql.catalyst.plans.logical.{UnaryNode, LogicalPlan, Aggregate, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, UnaryNode}
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources._
@@ -47,6 +45,7 @@ import org.apache.spark.sql.execution.datasources.oap.utils.OapUtils
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 
 /**
@@ -742,4 +741,33 @@ case class PrepareForIndexBuild(child: LogicalPlan) extends UnaryNode {
     StructField("_oap_unique_count", IntegerType),
     StructField("_oap_grouped_keys", MapType(child.output.toStructType, ArrayType(IntegerType)))
   )).toAttributes
+}
+
+case class RowIdScan(child: SparkPlan) extends UnaryExecNode {
+  override def output: Seq[Attribute] = child.output ++ StructType(Seq(
+    StructField("_oap_index_key", StructType(child.output.map(att =>
+      StructField(att.name, att.dataType, att.nullable)))),
+    StructField("_oap_filename", StringType),
+    StructField("_oap_row_id", IntegerType)
+  )).toAttributes
+
+  override protected def doExecute(): RDD[Key] = {
+    child.execute().mapPartitions { iter =>
+      new Iterator[Key] {
+        private var cnt = 0
+        private var oldName: Option[UTF8String] = None
+        override def hasNext: Boolean = iter.hasNext
+        override def next(): Key = {
+          val fName = InputFileNameHolder.getInputFileName()
+          if (!oldName.getOrElse(UTF8String.EMPTY_UTF8).equals(fName)) {
+            cnt = 0
+            oldName = Some(fName)
+          }
+          val ret = InternalRow(iter.next(), oldName.getOrElse(UTF8String.EMPTY_UTF8), cnt)
+          cnt += 1
+          ret
+        }
+      }
+    }
+  }
 }
