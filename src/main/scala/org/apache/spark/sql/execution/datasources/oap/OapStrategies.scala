@@ -461,7 +461,7 @@ object OapPrepareIndexStrategy extends Strategy with Logging {
       val groupingExpressionsForLists = childWithRowId.output.slice(0, 2)
       val groupingAttributesForLists = groupingExpressionsForLists.map(_.toAttribute)
       val localKeyAggregateExpressions =
-        Seq(AggregateExpression.apply(
+        Seq(AggregateExpression(
           CollectList(Column("_oap_row_id").expr), Complete, isDistinct = false))
       val localKeyAggregateAttributes = localKeyAggregateExpressions.map(_.resultAttribute)
       val fileKeyListExpressions = groupingAttributesForLists ++ localKeyAggregateAttributes
@@ -478,8 +478,8 @@ object OapPrepareIndexStrategy extends Strategy with Logging {
       val groupingExpressionsForSummary = aggrByFileAndKey.output.slice(0, 1)
       val localSummaryExpressions =
         Seq(
-          AggregateExpression.apply(Count(aggrByFileAndKey.output(1)), Complete, isDistinct = true),
-          AggregateExpression.apply(CollectListWithNull(
+          AggregateExpression(Count(aggrByFileAndKey.output(1)), Complete, isDistinct = true),
+          AggregateExpression(CollectListWithNull(
             CreateStruct(aggrByFileAndKey.output.slice(1, 3))), Complete, isDistinct = false)
         )
       val localSummaryAttributes = localSummaryExpressions.map(_.resultAttribute)

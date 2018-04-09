@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.types.StructType
 
-private[index] class OapIndexOutputFormat extends FileOutputFormat[Void, InternalRow] {
+private[index] class OapIndexOutputFormat2 extends FileOutputFormat[Void, InternalRow] {
 
   override def getRecordWriter(
       taskAttemptContext: TaskAttemptContext): RecordWriter[Void, InternalRow] = {

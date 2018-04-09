@@ -155,28 +155,6 @@ case class CreateIndexCommand(
     partitionSpec.getOrElse(Map.empty).foreach { case (k, v) =>
       ds = ds.filter(s"$k='$v'")
     }
-    val oldDs = ds
-    def alias(expr: Expression): NamedExpression = expr match {
-      case u: UnresolvedAttribute => UnresolvedAlias(u)
-      case expr: NamedExpression => expr
-      case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-        UnresolvedAlias(a, Some(Column.generateAlias))
-      case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
-    }
-    ds = ds.mapPartitions(iter => new Iterator[Row] {
-      private var localCnt = 0
-      override def hasNext: Boolean = iter.hasNext
-      override def next(): Row = {
-        val ret = Row(iter.next, localCnt)
-        localCnt += 1
-        ret
-      }
-    }).toDF("row", "cnt")
-    val groupingExprs: Seq[Expression] = InputFileName() :: UnresolvedAttribute("row") :: Nil
-    val aggExprs =
-      Seq(Alias(CollectSet(UnresolvedAttribute("cnt")).toAggregateExpression(), "ids")())
-    ds = Dataset.ofRows(sparkSession, Aggregate(
-      groupingExprs, (groupingExprs ++ aggExprs).map(alias), ds.logicalPlan))
 
     val outPutPath = fileCatalog.rootPaths.head
     assert(outPutPath != null, "Expected exactly one path to be specified, but no value")
@@ -202,7 +180,8 @@ case class CreateIndexCommand(
     val retVal = if (indexType == BTreeIndexType) {
       FileFormatWriter.write(
         sparkSession = sparkSession,
-        queryExecution = ds.queryExecution,
+        queryExecution = Dataset.ofRows(
+          sparkSession, PrepareForIndexBuild(ds.logicalPlan)).queryExecution,
         fileFormat = new OapIndexFileFormat,
         committer = committer,
         outputSpec = FileFormatWriter.OutputSpec(
@@ -215,7 +194,7 @@ case class CreateIndexCommand(
     } else {
       FileFormatWriter.write(
         sparkSession = sparkSession,
-        queryExecution = oldDs.queryExecution,
+        queryExecution = ds.queryExecution,
         fileFormat = new OapIndexFileFormat,
         committer = committer,
         outputSpec = FileFormatWriter.OutputSpec(
