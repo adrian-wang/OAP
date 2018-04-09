@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateOrdering}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, PhysicalAggregation, PhysicalOperation}
 import org.apache.spark.sql.catalyst.plans.{logical, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.oap.index.{PrepareForIndexBuild, RowIdScan}
 import org.apache.spark.sql.execution.joins.BuildRight
 import org.apache.spark.sql.internal.oap.OapConf
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.Utils
 
 trait OapStrategies extends Logging {
@@ -455,18 +456,15 @@ case class OapAggregationFileScanExec(
 
 object OapPrepareIndexStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PrepareForIndexBuild(child) =>
+    case p @ PrepareForIndexBuild(child) =>
       val childWithRowId = RowIdScan(planLater(child))
       val groupingExpressionsForLists = childWithRowId.output.slice(0, 2)
       val groupingAttributesForLists = groupingExpressionsForLists.map(_.toAttribute)
       val localKeyAggregateExpressions =
         Seq(AggregateExpression.apply(
           CollectList(Column("_oap_row_id").expr), Complete, isDistinct = false))
-      val localKeyAggregateAttributes =
-        localKeyAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-      val fileKeyListExpressions =
-        groupingAttributesForLists ++
-          localKeyAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+      val localKeyAggregateAttributes = localKeyAggregateExpressions.map(_.resultAttribute)
+      val fileKeyListExpressions = groupingAttributesForLists ++ localKeyAggregateAttributes
       // aggr by filename and key
       val aggrByFileAndKey = OapAggUtils.createLocalAggregate(
         groupingExpressions = groupingExpressionsForLists,
@@ -475,27 +473,23 @@ object OapPrepareIndexStrategy extends Strategy with Logging {
         resultExpressions = fileKeyListExpressions,
         child = childWithRowId
       )
-      val groupingExpressionsForSummary =
-        aggrByFileAndKey.output.slice(0, 1) :+ Alias(
-          IsNotNull(aggrByFileAndKey.output(1)), "_oap_null_key")()
-      val groupingAttributesForSummary = groupingExpressionsForSummary.map(_.toAttribute)
+      val ordering = fileKeyListExpressions.slice(0, 2).map(SortOrder(_, Ascending))
+      val aggrByFileAndKeySorted = SortExec(ordering, global = false, aggrByFileAndKey)
+      val groupingExpressionsForSummary = aggrByFileAndKey.output.slice(0, 1)
       val localSummaryExpressions =
         Seq(
           AggregateExpression.apply(Count(aggrByFileAndKey.output(1)), Complete, isDistinct = true),
-          AggregateExpression.apply(Count(aggrByFileAndKey.output(1)), Complete, isDistinct = true)
+          AggregateExpression.apply(CollectListWithNull(
+            CreateStruct(aggrByFileAndKey.output.slice(1, 3))), Complete, isDistinct = false)
         )
-      val localSummaryAttributes =
-        localSummaryExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-      val fileCountMapExpressions =
-        groupingAttributesForSummary ++
-          localSummaryExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+      val localSummaryAttributes = localSummaryExpressions.map(_.resultAttribute)
       // aggr by filename only to get distinct count
       val aggrByFile = OapAggUtils.createLocalAggregate(
         groupingExpressions = groupingExpressionsForSummary,
         aggregateExpressions = localSummaryExpressions,
         aggregateAttributes = localSummaryAttributes,
-        resultExpressions = fileCountMapExpressions,
-        child = aggrByFileAndKey
+        resultExpressions = p.output,
+        child = aggrByFileAndKeySorted
       )
       Seq(aggrByFile)
     case _ => Nil

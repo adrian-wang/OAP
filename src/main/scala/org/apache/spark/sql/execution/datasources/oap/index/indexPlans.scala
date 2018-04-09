@@ -735,11 +735,25 @@ case class OapEnableIndexCommand(indexName: String) extends RunnableCommand {
   }
 }
 
+/**
+ * This is used for index build pre-aggregate for each file.
+ * The output looks like
+ * Row("filename1.oap", 2, [Row(NullRow, [7,8]), Row(Row(1), [0,1,3,4,5,6]), Row(Row(5), [2,9])])
+ * The operation is like
+ * "select filename, count(distinct index_col), collect_list((index_col, id_list))
+ * from
+ * (
+ *   select filename, index_col, collect_list(row_id) as id_list from _RowIdScan
+ *   group by filename, index_col order by filename, index_col
+ * ) temp_agg
+ * group by filename"
+ */
 case class PrepareForIndexBuild(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = StructType(Seq(
     StructField("_oap_filename", StringType),
     StructField("_oap_unique_count", IntegerType),
-    StructField("_oap_grouped_keys", MapType(child.output.toStructType, ArrayType(IntegerType)))
+    StructField("_oap_grouped_keys", ArrayType(StructType(Seq(
+      StructField("key", child.output.toStructType), StructField("ids", ArrayType(IntegerType))))))
   )).toAttributes
 }
 
