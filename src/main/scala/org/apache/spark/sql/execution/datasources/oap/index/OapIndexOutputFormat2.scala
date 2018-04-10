@@ -59,8 +59,7 @@ private[index] class OapIndexOutputFormat2 extends FileOutputFormat[Void, Intern
       val writer = BTreeIndexFileWriter(configuration, file)
       new BTreeIndexRecordWriter(configuration, writer, schema)
     } else if (indexType == "BITMAP") {
-      val writer = file.getFileSystem(configuration).create(file, true)
-      new BitmapIndexRecordWriter(configuration, writer, schema)
+      throw new NotImplementedError("TODO")
     } else {
       throw new OapException("Unknown Index Type: " + indexType)
     }
