@@ -63,12 +63,12 @@ object FileFormatWriter extends Logging {
       val customPartitionLocations: Map[TablePartitionSpec, String])
     extends Serializable {
 
-    assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ nonPartitionColumns),
-      s"""
-         |All columns: ${allColumns.mkString(", ")}
-         |Partition columns: ${partitionColumns.mkString(", ")}
-         |Non-partition columns: ${nonPartitionColumns.mkString(", ")}
-       """.stripMargin)
+//    assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ nonPartitionColumns),
+//      s"""
+//         |All columns: ${allColumns.mkString(", ")}
+//         |Partition columns: ${partitionColumns.mkString(", ")}
+//         |Non-partition columns: ${nonPartitionColumns.mkString(", ")}
+//       """.stripMargin)
   }
 
   /**

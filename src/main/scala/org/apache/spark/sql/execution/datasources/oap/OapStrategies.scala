@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.datasources.oap
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, Column, SparkSession, Strategy}
+import org.apache.spark.sql.{execution, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateOrdering}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, PhysicalAggregation, PhysicalOperation}
 import org.apache.spark.sql.catalyst.plans.{logical, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -32,10 +32,8 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.OapAggUtils
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.oap.index.{PrepareForIndexBuild, RowIdScan}
 import org.apache.spark.sql.execution.joins.BuildRight
 import org.apache.spark.sql.internal.oap.OapConf
-import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.Utils
 
 trait OapStrategies extends Logging {
@@ -451,47 +449,5 @@ case class OapAggregationFileScanExec(
     val aggString = Utils.truncatedString(aggExpression, "[", ",", "]")
 
     s"OapAggregationFileScanExec(output=$outputString, Aggregation function=$aggString)"
-  }
-}
-
-object OapPrepareIndexStrategy extends Strategy with Logging {
-  def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case p @ PrepareForIndexBuild(child) =>
-      val childWithRowId = RowIdScan(planLater(child))
-      val groupingExpressionsForLists = childWithRowId.output.slice(0, 2)
-      val groupingAttributesForLists = groupingExpressionsForLists.map(_.toAttribute)
-      val localKeyAggregateExpressions =
-        Seq(AggregateExpression(
-          CollectList(Column("_oap_row_id").expr), Complete, isDistinct = false))
-      val localKeyAggregateAttributes = localKeyAggregateExpressions.map(_.resultAttribute)
-      val fileKeyListExpressions = groupingAttributesForLists ++ localKeyAggregateAttributes
-      // aggr by filename and key
-      val aggrByFileAndKey = OapAggUtils.createLocalAggregate(
-        groupingExpressions = groupingExpressionsForLists,
-        aggregateExpressions = localKeyAggregateExpressions,
-        aggregateAttributes = localKeyAggregateAttributes,
-        resultExpressions = fileKeyListExpressions,
-        child = childWithRowId
-      )
-      val ordering = fileKeyListExpressions.slice(0, 2).map(SortOrder(_, Ascending))
-      val aggrByFileAndKeySorted = SortExec(ordering, global = false, aggrByFileAndKey)
-      val groupingExpressionsForSummary = aggrByFileAndKey.output.slice(0, 1)
-      val localSummaryExpressions =
-        Seq(
-          AggregateExpression(Count(aggrByFileAndKey.output(1)), Complete, isDistinct = true),
-          AggregateExpression(CollectListWithNull(
-            CreateStruct(aggrByFileAndKey.output.slice(1, 3))), Complete, isDistinct = false)
-        )
-      val localSummaryAttributes = localSummaryExpressions.map(_.resultAttribute)
-      // aggr by filename only to get distinct count
-      val aggrByFile = OapAggUtils.createLocalAggregate(
-        groupingExpressions = groupingExpressionsForSummary,
-        aggregateExpressions = localSummaryExpressions,
-        aggregateAttributes = localSummaryAttributes,
-        resultExpressions = p.output,
-        child = aggrByFileAndKeySorted
-      )
-      Seq(aggrByFile)
-    case _ => Nil
   }
 }
