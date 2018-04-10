@@ -29,6 +29,7 @@ import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.execution.datasources.oap.io.IndexFile
 import org.apache.spark.sql.execution.datasources.oap.statistics.StatisticsWriteManager
@@ -283,26 +284,25 @@ private[index] case class BTreeIndexRecordWriter2(
   @transient private lazy val genericProjector = FromUnsafeProjection(keySchema)
   private lazy val nnkw = new NonNullKeyWriter(keySchema)
 
-  private var recordCount: Int = 0
   private lazy val statisticsManager = new StatisticsWriteManager {
     this.initialize(BTreeIndexType, keySchema, configuration)
   }
 
   override def write(key: Void, value: InternalRow): Unit = {
-    val v = genericProjector(value.getStruct(0, keySchema.length)).copy()
-    statisticsManager.addOapKey(v)
-    require(
-      (!v.anyNull) || keySchema.length == 1,
-      "No support for multi-column index building with null keys!")
-    if (recordCount == Int.MaxValue) {
-      throw new OapException("Cannot support indexing more than 2G rows!")
-    }
-    recordCount += 1
-  }
+    val data = value.getArray(2) // UnsafeArrayData
+    val uniqueCntExceptNull = value.getInt(1)
+    // TODO statistics can also be retrieved directly from local aggr
+    // val v = genericProjector(value.getStruct(0, keySchema.length)).copy()
+    // statisticsManager.addOapKey(v)
 
-  override def close(context: TaskAttemptContext): Unit = {
-    val (nullKeys, nonNullUniqueKeys) = sortUniqueKeys()
-    val treeShape = BTreeUtils.generate2(nonNullUniqueKeys.length)
+    val firstRow = data.getStruct(0, 2).getStruct(0, keySchema.length)
+    val (nonNullStartIdx, nullKeyRowCount) = if (firstRow.anyNull) {
+      require(keySchema.length == 1, "No support for multi-column index building with null keys!")
+      (1, data.getStruct(0, 2).getArray(1).numElements())
+    } else {
+      (0, 0)
+    }
+    val treeShape = BTreeUtils.generate2(uniqueCntExceptNull)
     // Trick here. If root node has no child, then write root node as a child.
     val children = if (treeShape.children.nonEmpty) treeShape.children else treeShape :: Nil
 
@@ -313,72 +313,44 @@ private[index] case class BTreeIndexRecordWriter2(
     var startPosInRowList = 0
     val nodes = children.map { node =>
       val keyCount = sumKeyCount(node) // total number of keys of this node
-    val nodeUniqueKeys =
-      nonNullUniqueKeys.slice(startPosInKeyList, startPosInKeyList + keyCount)
-      // total number of row ids of this node
-      val rowCount = nodeUniqueKeys.map(multiHashMap.get(_).size()).sum
+      val nodeUniqueKeyMaps = Range(startPosInKeyList, startPosInKeyList + keyCount).map { i =>
+        data.getStruct(i + nonNullStartIdx, 2)
+      }
+      val rowCount = nodeUniqueKeyMaps.map(_.getArray(1).numElements()).sum
 
-      val nodeBuf = serializeNode(nodeUniqueKeys, startPosInRowList)
+      val nodeBuf = serializeNode2(nodeUniqueKeyMaps, startPosInRowList)
       fileWriter.writeNode(nodeBuf)
       startPosInKeyList += keyCount
       startPosInRowList += rowCount
-      if (keyCount == 0 || nodeUniqueKeys.isEmpty || nonNullUniqueKeys.isEmpty) {
+      if (keyCount == 0 || data.numElements() == nonNullStartIdx) {
         // this node is an empty node
         BTreeNodeMetaData(0, nodeBuf.length, null, null)
+      } else {
+        BTreeNodeMetaData(
+          rowCount,
+          nodeBuf.length,
+          extractKeyFromAggrRow(nodeUniqueKeyMaps.head),
+          extractKeyFromAggrRow(nodeUniqueKeyMaps.last))
       }
-      else BTreeNodeMetaData(rowCount, nodeBuf.length, nodeUniqueKeys.head, nodeUniqueKeys.last)
     }
     // Write Row Id List
-    serializeAndWriteRowIdLists(nonNullUniqueKeys ++ nullKeys)
+    serializeAndWriteRowIdLists2(data, nonNullStartIdx)
     // Write Footer
-    val nullKeyRowCount = nullKeys.map(multiHashMap.get(_).size()).sum
     fileWriter.writeFooter(serializeFooter(nullKeyRowCount, nodes))
     // End
     fileWriter.end()
     fileWriter.close()
   }
 
-  private[index] def sortUniqueKeys(): (Seq[InternalRow], Seq[InternalRow]) = {
-    def buildOrdering(keySchema: StructType): Ordering[InternalRow] = {
-      // here i change to use param id to index_id to get data type in keySchema
-      val order = keySchema.zipWithIndex.map {
-        case (field, index) => SortOrder(
-          BoundReference(index, field.dataType, nullable = true),
-          if (!field.metadata.contains("isAscending") || field.metadata.getBoolean("isAscending")) {
-            Ascending
-          } else {
-            Descending
-          }
-        )
-      }
-      GenerateOrdering.generate(order, keySchema.toAttributes)
-    }
+  private def extractKeyFromAggrRow(row: InternalRow): InternalRow = {
+    row.getStruct(0, keySchema.length)
+  }
 
-    lazy val ordering = buildOrdering(keySchema)
-    val partitionUniqueSize = multiHashMap.keySet().size()
-    val uniqueKeys = multiHashMap.keySet().toArray(new Array[InternalRow](partitionUniqueSize))
-    assert(uniqueKeys.size == partitionUniqueSize)
-    val (nullKeys, nonNullKeys) = uniqueKeys.partition(_.anyNull)
-    assert(nullKeys.length + nonNullKeys.length == partitionUniqueSize)
-    require(
-      nullKeys.isEmpty || keySchema.length == 1,
-      "No support for multi-column index building with null keys!")
-    lazy val comparator: Comparator[InternalRow] = new Comparator[InternalRow]() {
-      override def compare(o1: InternalRow, o2: InternalRow): Int = {
-        if (o1 == null && o2 == null) {
-          0
-        } else if (o1 == null) {
-          -1
-        } else if (o2 == null) {
-          1
-        } else {
-          ordering.compare(o1, o2)
-        }
-      }
-    }
-    // sort keys
-    java.util.Arrays.sort(nonNullKeys, comparator)
-    (nullKeys.toSeq, nonNullKeys.toSeq)
+  private def extractListSizeFromAggrRow(row: InternalRow): Int = {
+    row.getArray(1).numElements()
+  }
+
+  override def close(context: TaskAttemptContext): Unit = {
   }
 
   /**
@@ -396,19 +368,20 @@ private[index] case class BTreeIndexRecordWriter2(
    * ...
    * Key Data For Key #N
    */
-  private[index] def serializeNode(
-      uniqueKeys: Seq[InternalRow],
+  private[index] def serializeNode2(
+      uniqueKeyMaps: Seq[InternalRow],
       startPosInRowList: Int): Array[Byte] = {
     val buffer = new ByteArrayOutputStream()
     val keyBuffer = new ByteArrayOutputStream()
 
-    IndexUtils.writeInt(buffer, uniqueKeys.length)
+    IndexUtils.writeInt(buffer, uniqueKeyMaps.length)
     var rowPos = startPosInRowList
-    uniqueKeys.foreach { key =>
+    uniqueKeyMaps.foreach { keyMap =>
+      val key = extractKeyFromAggrRow(keyMap)
       IndexUtils.writeInt(buffer, keyBuffer.size())
       IndexUtils.writeInt(buffer, rowPos)
       nnkw.writeKey(keyBuffer, key)
-      rowPos += multiHashMap.get(key).size()
+      rowPos += extractListSizeFromAggrRow(keyMap)
     }
     buffer.toByteArray ++ keyBuffer.toByteArray
   }
@@ -424,11 +397,16 @@ private[index] case class BTreeIndexRecordWriter2(
    * Key:    1 2 3 4 1 2 3 4 1 2
    * Then Row Id List is Stored as: 0481592637
    */
-  private def serializeAndWriteRowIdLists(uniqueKeys: Seq[InternalRow]): Unit = {
-    uniqueKeys.foreach { key =>
-      multiHashMap.get(key).asScala.foreach(x =>
-        fileWriter.writeRowId(IndexUtils.toBytes(x))
-      )
+  private def serializeAndWriteRowIdLists2(uniqueKeyMaps: ArrayData, nonNullStart: Int): Unit = {
+    def extractListFromAggrRow(row: InternalRow): ArrayData = {
+      row.getArray(1)
+    }
+    val total = uniqueKeyMaps.numElements()
+    val writeSeq = Range(nonNullStart, nonNullStart + total).map(_ % total)
+    writeSeq.foreach { idx =>
+      val list = extractListFromAggrRow(uniqueKeyMaps.getStruct(idx, 2))
+      val listCount = list.numElements()
+      Range(0, listCount).foreach(i => fileWriter.writeRowId(IndexUtils.toBytes(list.getInt(i))))
     }
   }
 

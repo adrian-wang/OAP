@@ -65,9 +65,9 @@ private[index] class OapIndexOutputWriter2(
 
   override def writeInternal(row: InternalRow): Unit = {
     closeWriter()
-    initWriter(row.getString(0), row.getInt(1))
+    initWriter(row.getString(0))
     recordWriter.write(null, row)
-    rowCount += 1
+    rowCount += row.getInt(1)
   }
 
   override def close(): Seq[IndexBuildResult] = {
@@ -75,7 +75,7 @@ private[index] class OapIndexOutputWriter2(
     results
   }
 
-  private def initWriter(filename: String, uniqueCnt: Int): Unit = {
+  private def initWriter(filename: String): Unit = {
     inputFileName = filename
     recordWriter = outputFormat.getRecordWriter(context)
     rowCount = 0

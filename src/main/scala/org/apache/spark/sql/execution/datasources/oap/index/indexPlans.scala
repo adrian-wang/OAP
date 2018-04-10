@@ -754,6 +754,9 @@ case class RowIdScan(child: SparkPlan) extends UnaryExecNode {
             oldName = Some(fName)
           }
           val ret = InternalRow(iter.next(), oldName.getOrElse(UTF8String.EMPTY_UTF8), cnt)
+          if (cnt == Int.MaxValue) {
+            throw new OapException("Cannot support indexing more than 2G rows!")
+          }
           cnt += 1
           ret
         }

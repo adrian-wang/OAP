@@ -61,13 +61,3 @@ private[index] class OapIndexFileFormat2
     }
   }
 }
-
-private[index] object OapIndexFileFormat {
-  val ROW_SCHEMA: String = "org.apache.spark.sql.oap.row.attributes"
-  val INDEX_TYPE: String = "org.apache.spark.sql.oap.index.type"
-  val INDEX_NAME: String = "org.apache.spark.sql.oap.index.name"
-  val INDEX_TIME: String = "org.apache.spark.sql.oap.index.time"
-  val IS_APPEND: String = "org.apache.spark.sql.oap.index.append"
-}
-
-case class IndexBuildResult(dataFile: String, rowCount: Long, fingerprint: String, parent: String)
