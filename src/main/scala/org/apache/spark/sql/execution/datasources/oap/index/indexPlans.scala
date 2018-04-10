@@ -178,7 +178,7 @@ case class CreateIndexCommand(
       FileFormatWriter.write(
         sparkSession = sparkSession,
         queryExecution = Dataset.ofRows(
-          sparkSession, PrepareForIndexBuild(RowIdScan(ds.logicalPlan))).queryExecution,
+          sparkSession, PrepareForIndexBuild(ds.logicalPlan)).queryExecution,
         fileFormat = new OapIndexFileFormat2,
         committer = committer,
         outputSpec = FileFormatWriter.OutputSpec(
@@ -724,16 +724,26 @@ case class OapEnableIndexCommand(indexName: String) extends RunnableCommand {
  * ) temp_agg
  * group by filename"
  */
-case class PrepareForIndexBuild(child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = StructType(Seq(
-    StructField("_oap_filename", StringType),
-    StructField("_oap_unique_count", IntegerType),
-    StructField("_oap_grouped_keys", ArrayType(StructType(Seq(
-      StructField("key", child.output.toStructType), StructField("ids", ArrayType(IntegerType))))))
-  )).toAttributes
+case class PrepareForIndexBuild(child: LogicalPlan, output: Seq[Attribute]) extends UnaryNode {
+  override def producedAttributes: AttributeSet = AttributeSet(output)
+}
+
+/** Factory for constructing new `RowIdScan` nodes. */
+object PrepareForIndexBuild {
+  def apply(child: LogicalPlan): PrepareForIndexBuild = {
+    val output = StructType(Seq(
+      StructField("_oap_filename", StringType),
+      StructField("_oap_unique_count", IntegerType),
+      StructField("_oap_grouped_keys", ArrayType(StructType(Seq(
+        StructField("key", child.output.toStructType),
+        StructField("ids", ArrayType(IntegerType))))))
+    )).toAttributes
+    new PrepareForIndexBuild(RowIdScan(child), output)
+  }
 }
 
 case class RowIdScan(child: LogicalPlan, output: Seq[Attribute]) extends UnaryNode {
+  override def producedAttributes: AttributeSet = AttributeSet(output)
 }
 
 case class RowIdScanExec(child: SparkPlan, output: Seq[Attribute]) extends UnaryExecNode {

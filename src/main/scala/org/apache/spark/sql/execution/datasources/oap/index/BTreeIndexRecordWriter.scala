@@ -281,7 +281,6 @@ private[index] case class BTreeIndexRecordWriter2(
     fileWriter: BTreeIndexFileWriter,
     keySchema: StructType) extends RecordWriter[Void, InternalRow] {
 
-  @transient private lazy val genericProjector = FromUnsafeProjection(keySchema)
   private lazy val nnkw = new NonNullKeyWriter(keySchema)
 
   private lazy val statisticsManager = new StatisticsWriteManager {
@@ -290,7 +289,8 @@ private[index] case class BTreeIndexRecordWriter2(
 
   override def write(key: Void, value: InternalRow): Unit = {
     val data = value.getArray(2) // UnsafeArrayData
-    val uniqueCntExceptNull = value.getInt(1)
+    // val uniqueCntExceptNull = value.getInt(1)
+    val uniqueCntExceptNull = value.getStruct(1, 1).getInt(0)
     // TODO statistics can also be retrieved directly from local aggr
     // val v = genericProjector(value.getStruct(0, keySchema.length)).copy()
     // statisticsManager.addOapKey(v)
@@ -406,7 +406,9 @@ private[index] case class BTreeIndexRecordWriter2(
     writeSeq.foreach { idx =>
       val list = extractListFromAggrRow(uniqueKeyMaps.getStruct(idx, 2))
       val listCount = list.numElements()
-      Range(0, listCount).foreach(i => fileWriter.writeRowId(IndexUtils.toBytes(list.getInt(i))))
+      // Range(0, listCount).foreach(i => fileWriter.writeRowId(IndexUtils.toBytes(list.getInt(i))))
+      Range(0, listCount).foreach(i => fileWriter.writeRowId(
+        IndexUtils.toBytes(list.getStruct(i, 1).getInt(0))))
     }
   }
 

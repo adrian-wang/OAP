@@ -357,13 +357,13 @@ object DataSourceStrategy extends Strategy with Logging {
       part, query, overwrite, false) if part.isEmpty =>
       ExecutedCommandExec(InsertIntoDataSourceCommand(l, query, overwrite)) :: Nil
 
-    case p @ PrepareForIndexBuild(RowIdScan(child, out)) =>
+    case p @ PrepareForIndexBuild(RowIdScan(child, out), _) =>
       val childWithRowId = RowIdScanExec(planLater(child), out)
       val groupingExpressionsForLists = childWithRowId.output.slice(0, 2)
       val groupingAttributesForLists = groupingExpressionsForLists.map(_.toAttribute)
       val localKeyAggregateExpressions =
         Seq(AggregateExpression(
-          CollectList(Column("_oap_row_id").expr), Complete, isDistinct = false))
+          CollectList(childWithRowId.output(2)), Complete, isDistinct = false))
       val localKeyAggregateAttributes = localKeyAggregateExpressions.map(_.resultAttribute)
       val fileKeyListExpressions = groupingAttributesForLists ++ localKeyAggregateAttributes
       // aggr by filename and key
