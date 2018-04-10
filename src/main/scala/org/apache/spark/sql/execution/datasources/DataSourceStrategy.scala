@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.OapAggUtils
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.oap.index.{PrepareForIndexBuild, RowIdScan}
+import org.apache.spark.sql.execution.datasources.oap.index.{PrepareForIndexBuild, RowIdScan, RowIdScanExec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -357,8 +357,8 @@ object DataSourceStrategy extends Strategy with Logging {
       part, query, overwrite, false) if part.isEmpty =>
       ExecutedCommandExec(InsertIntoDataSourceCommand(l, query, overwrite)) :: Nil
 
-    case p @ PrepareForIndexBuild(child) =>
-      val childWithRowId = RowIdScan(planLater(child))
+    case p @ PrepareForIndexBuild(RowIdScan(child, out)) =>
+      val childWithRowId = RowIdScanExec(planLater(child), out)
       val groupingExpressionsForLists = childWithRowId.output.slice(0, 2)
       val groupingAttributesForLists = groupingExpressionsForLists.map(_.toAttribute)
       val localKeyAggregateExpressions =

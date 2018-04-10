@@ -178,7 +178,7 @@ case class CreateIndexCommand(
       FileFormatWriter.write(
         sparkSession = sparkSession,
         queryExecution = Dataset.ofRows(
-          sparkSession, PrepareForIndexBuild(ds.logicalPlan)).queryExecution,
+          sparkSession, PrepareForIndexBuild(RowIdScan(ds.logicalPlan))).queryExecution,
         fileFormat = new OapIndexFileFormat2,
         committer = committer,
         outputSpec = FileFormatWriter.OutputSpec(
@@ -733,14 +733,10 @@ case class PrepareForIndexBuild(child: LogicalPlan) extends UnaryNode {
   )).toAttributes
 }
 
-case class RowIdScan(child: SparkPlan) extends UnaryExecNode {
-  override def output: Seq[Attribute] = child.output ++ StructType(Seq(
-    StructField("_oap_index_key", StructType(child.output.map(att =>
-      StructField(att.name, att.dataType, att.nullable)))),
-    StructField("_oap_filename", StringType),
-    StructField("_oap_row_id", IntegerType)
-  )).toAttributes
+case class RowIdScan(child: LogicalPlan, output: Seq[Attribute]) extends UnaryNode {
+}
 
+case class RowIdScanExec(child: SparkPlan, output: Seq[Attribute]) extends UnaryExecNode {
   override protected def doExecute(): RDD[Key] = {
     child.execute().mapPartitions { iter =>
       new Iterator[Key] {
@@ -762,5 +758,18 @@ case class RowIdScan(child: SparkPlan) extends UnaryExecNode {
         }
       }
     }
+  }
+}
+
+/** Factory for constructing new `RowIdScan` nodes. */
+object RowIdScan {
+  def apply(child: LogicalPlan): RowIdScan = {
+    val output = child.output ++ StructType(Seq(
+      StructField("_oap_index_key", StructType(child.output.map(att =>
+        StructField(att.name, att.dataType, att.nullable)))),
+      StructField("_oap_filename", StringType),
+      StructField("_oap_row_id", IntegerType)
+    )).toAttributes
+    new RowIdScan(child, output)
   }
 }
