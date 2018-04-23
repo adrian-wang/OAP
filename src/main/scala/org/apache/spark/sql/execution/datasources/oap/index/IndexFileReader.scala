@@ -15,19 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.sql.execution.datasources.oap.index
 
-import org.apache.spark.sql.catalyst.InternalRow
+import java.io.InputStream
 
-package object oap {
-  type Key = InternalRow
-}
+import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCache
 
-/**
- * To express OAP specific exceptions, including but not limited to indicate unsupported operations,
- * for example: BitMapIndexType only supports one single column
- */
-class OapException(message: String, cause: Throwable) extends Exception(message, cause) {
+private[oap] trait IndexFileReader {
 
-  def this(message: String) = this(message, null)
+  protected def is: InputStream
+
+  def readFiberCache(position: Long, length: Int): FiberCache
+
+  def read(position: Long, length: Int): Array[Byte]
+
+  def readFully(position: Long, buf: Array[Byte])
+
+  def getLen: Long
+
+  def getName: String
+
+  def close(): Unit = is.close()
 }

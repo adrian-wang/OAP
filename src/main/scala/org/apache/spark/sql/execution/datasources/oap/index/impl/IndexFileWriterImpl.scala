@@ -15,31 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.oap.index
+package org.apache.spark.sql.execution.datasources.oap.index.impl
+
+import java.io.OutputStream
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.OapException
-import org.apache.spark.sql.execution.datasources.oap.io.IndexFile
+import org.apache.spark.sql.execution.datasources.oap.index.IndexFileWriter
 
+private[index] case class IndexFileWriterImpl(
+    configuration: Configuration,
+    indexPath: Path) extends IndexFileWriter {
 
-trait BTreeIndexFileReader extends Logging
-object BTreeIndexFileReader {
+  protected override val os: OutputStream =
 
-  def apply(configuration: Configuration, file: Path): BTreeIndexFileReader = {
-    val fs = file.getFileSystem(configuration)
-    val reader = fs.open(file)
-    val fileLen = fs.getFileStatus(file).getLen
+  indexPath.getFileSystem(configuration).create(indexPath, true)
 
-    val version = IndexUtils.readHead(reader, 0)
-    if (version == 1) {
-      BTreeIndexFileReaderV1(configuration, reader, file, fileLen)
-    } else if (version == IndexFile.UNKNOWN_VERSION) {
-      throw new OapException("not a valid index file")
-    } else {
-      throw new OapException(s"not support index version: $version")
-    }
-  }
+  // Give RecordWriter a chance which file it's writing to.
+  override def getName: String = indexPath.toString
 }

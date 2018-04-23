@@ -17,14 +17,19 @@
 
 package org.apache.spark.sql.execution.datasources.oap.index
 
-sealed abstract class AnyIndexType {
-  def toString: String
-}
+import java.io.OutputStream
 
-case object BTreeIndexType extends AnyIndexType {
-  override def toString: String = "BTREE"
-}
+private[index] trait IndexFileWriter {
 
-case object BitMapIndexType extends AnyIndexType {
-  override def toString: String = "BITMAP"
+  protected def os: OutputStream
+
+  def getName: String
+
+  def write(bytes: Array[Byte]): Unit = os.write(bytes)
+
+  def writeInt(value: Int): Unit = IndexUtils.writeInt(os, value)
+
+  def writeLong(value: Long): Unit = IndexUtils.writeLong(os, value)
+
+  def close(): Unit = os.close()
 }

@@ -15,19 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.sql.execution.datasources.oap.index
 
-import org.apache.spark.sql.catalyst.InternalRow
-
-package object oap {
-  type Key = InternalRow
+sealed abstract class OapIndexType {
+  def toString: String
 }
 
-/**
- * To express OAP specific exceptions, including but not limited to indicate unsupported operations,
- * for example: BitMapIndexType only supports one single column
- */
-class OapException(message: String, cause: Throwable) extends Exception(message, cause) {
+case object BTreeIndexType extends OapIndexType {
+  override def toString: String = "BTREE"
+}
 
-  def this(message: String) = this(message, null)
+case object BitMapIndexType extends OapIndexType {
+  override def toString: String = "BITMAP"
 }

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.oap.index
 import java.io.ByteArrayOutputStream
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.{Aggregator, SparkConf, TaskContext}
@@ -28,16 +29,32 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.execution.datasources.OapException
+import org.apache.spark.sql.execution.datasources.oap.index.OapIndexProperties.IndexVersion
+import org.apache.spark.sql.execution.datasources.oap.index.OapIndexProperties.IndexVersion.IndexVersion
+import org.apache.spark.sql.execution.datasources.oap.index.impl.IndexFileWriterImpl
 import org.apache.spark.sql.execution.datasources.oap.io.IndexFile
 import org.apache.spark.sql.execution.datasources.oap.statistics.StatisticsWriteManager
 import org.apache.spark.sql.execution.datasources.oap.utils.{BTreeNode, BTreeUtils, NonNullKeyWriter}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.{BitSet, OapExternalSorter}
 
+private[index] object BTreeIndexRecordWriter {
+  def apply(
+      configuration: Configuration,
+      indexFile: Path,
+      schema: StructType,
+      indexVersion: IndexVersion): BTreeIndexRecordWriter = {
+    val writer = IndexFileWriterImpl(configuration, indexFile)
+    indexVersion match {
+      case IndexVersion.OAP_INDEX_V1 =>
+        BTreeIndexRecordWriter(configuration, writer, schema)
+    }
+  }
+}
 
 private[index] case class BTreeIndexRecordWriter(
     configuration: Configuration,
-    fileWriter: BTreeIndexFileWriter,
+    fileWriter: IndexFileWriter,
     keySchema: StructType) extends RecordWriter[Void, InternalRow] {
 
   @transient private lazy val genericProjector = FromUnsafeProjection(keySchema)
@@ -94,21 +111,22 @@ private[index] case class BTreeIndexRecordWriter(
     GenerateOrdering.generate(order, keySchema.toAttributes)
   }
 
+
   private lazy val ordering = buildOrdering(keySchema)
 
   /**
    * Working Flow:
-   *  1. Call fileWriter.start() to write some Index Info
+   *  1. Write index magic version into header
    *  2. Split all unique keys into some nodes
    *  3. Serialize nodes and call fileWriter.writeNode()
    *  4. Serialize row id List based on sorted unique keys and call fileWriter.writeRowIdList()
    *  5. Serialize footer and call fileWriter.writeFooter()
-   *  5. Call fileWriter.end() to write some meta data (e.g. file offset for each section)
+   *  5. Write index file meta: footer size, row id list size
    */
   private[index] def flush(): Unit = {
     val sortedIter = externalSorter.iterator
     // Start
-    fileWriter.start()
+    fileWriter.write(IndexUtils.serializeVersion(IndexFile.VERSION_NUM))
     // TODO this could be large, considering writing row id list in a separate file first
     val rowIdListBuffer = new ByteArrayOutputStream()
     val nodes = if (sortedIter.hasNext) {
@@ -136,14 +154,18 @@ private[index] case class BTreeIndexRecordWriter(
       Seq(BTreeNodeMetaData(0, 0, null, null))
     }
     // Write Row Id List
-    fileWriter.writeRowIdList(rowIdListBuffer.toByteArray)
+    fileWriter.write(rowIdListBuffer.toByteArray)
+    var nullIdSize = 0
     nullBitSet.iterator.foreach { x =>
-      fileWriter.writeRowId(IndexUtils.toBytes(x))
+      fileWriter.write(IndexUtils.toBytes(x))
+      nullIdSize += IndexUtils.INT_SIZE
     }
     // Write Footer
-    fileWriter.writeFooter(serializeFooter(nullRecordCount, nodes))
-    // End
-    fileWriter.end()
+    val footerBuf = serializeFooter(nullRecordCount, nodes)
+    fileWriter.write(footerBuf)
+    // Write index file meta: footer size, row id list size
+    fileWriter.writeLong(rowIdListBuffer.size + nullIdSize)
+    fileWriter.writeInt(footerBuf.length)
   }
 
   /**
@@ -182,7 +204,7 @@ private[index] case class BTreeIndexRecordWriter(
       }
     }
     val byteArray = buffer.toByteArray ++ keyBuffer.toByteArray
-    fileWriter.writeNode(byteArray)
+    fileWriter.write(byteArray)
     (rowPos, byteArray.length, uniqueKeys.head._1, uniqueKeys.last._1)
   }
 

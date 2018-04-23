@@ -51,7 +51,7 @@ case class CreateIndexCommand(
     table: TableIdentifier,
     indexColumns: Array[IndexColumn],
     allowExists: Boolean,
-    indexType: AnyIndexType,
+    indexType: OapIndexType,
     partitionSpec: Option[TablePartitionSpec]) extends RunnableCommand with Logging {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -123,7 +123,9 @@ case class CreateIndexCommand(
           metaBuilder.addIndexMeta(new IndexMeta(indexName, time, BTreeIndex(entries)))
         case BitMapIndexType =>
           // Currently OAP index type supports the column with one single field.
-          assert(indexColumns.length == 1, "BitMapIndexType only supports one single column")
+          if (indexColumns.length != 1) {
+            throw new OapException("BitMapIndexType only supports one single column")
+          }
           val entries = indexColumns.map(col =>
             schema.map(_.name).toIndexedSeq.indexOf(col.columnName))
           metaBuilder.addIndexMeta(new IndexMeta(indexName, time, BitMapIndex(entries)))
@@ -351,7 +353,7 @@ case class RefreshIndexCommand(
     })
 
     val buildrst = indices.map(i => {
-      var indexType: AnyIndexType = BTreeIndexType
+      var indexType: OapIndexType = BTreeIndexType
 
       val indexColumns = i.indexType match {
         case BTreeIndex(entries) =>
