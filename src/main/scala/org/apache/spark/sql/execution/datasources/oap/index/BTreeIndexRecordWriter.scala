@@ -18,14 +18,12 @@
 package org.apache.spark.sql.execution.datasources.oap.index
 
 import java.io.ByteArrayOutputStream
-import java.util.Comparator
 
-import scala.collection.JavaConverters._
-
-import com.google.common.collect.ArrayListMultimap
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 
+import org.apache.spark.{Aggregator, SparkConf, TaskContext}
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
@@ -34,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.oap.io.IndexFile
 import org.apache.spark.sql.execution.datasources.oap.statistics.StatisticsWriteManager
 import org.apache.spark.sql.execution.datasources.oap.utils.{BTreeNode, BTreeUtils, NonNullKeyWriter}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.{BitSet, OapExternalSorter}
 
 
 private[index] case class BTreeIndexRecordWriter(
@@ -44,15 +43,31 @@ private[index] case class BTreeIndexRecordWriter(
   @transient private lazy val genericProjector = FromUnsafeProjection(keySchema)
   private lazy val nnkw = new NonNullKeyWriter(keySchema)
 
-  private val multiHashMap = ArrayListMultimap.create[InternalRow, Int]()
+  private val combiner: Int => Seq[Int] = Seq(_)
+  private val merger: (Seq[Int], Int) => Seq[Int] = (seq, i) => seq :+ i
+  private val mergeCombiner: (Seq[Int], Seq[Int]) => Seq[Int] = (s1, s2) => s1 ++ s2
+  private val aggregator =
+    new Aggregator[InternalRow, Int, Seq[Int]](combiner, merger, mergeCombiner)
+  private val externalSorter = new OapExternalSorter[InternalRow, Int, Seq[Int]](
+    TaskContext.get(), Some(aggregator), Some(ordering))
   private var recordCount: Int = 0
+  private var nullRecordCount: Int = 0
   private lazy val statisticsManager = new StatisticsWriteManager {
     this.initialize(BTreeIndexType, keySchema, configuration)
   }
+  // nullBitSet is less than 33MB
+  private lazy val nullBitSet = new BitSet(Int.MaxValue)
 
   override def write(key: Void, value: InternalRow): Unit = {
     val v = genericProjector(value).copy()
-    multiHashMap.put(v, recordCount)
+    // multiHashMap.put(v, recordCount)
+    if (v.anyNull) {
+      require(keySchema.length == 1, "No support for multi-column index building with null keys!")
+      nullBitSet.set(recordCount)
+      nullRecordCount += 1
+    } else {
+      externalSorter.insert(v, recordCount)
+    }
     statisticsManager.addOapKey(v)
     if (recordCount == Int.MaxValue) {
       throw new OapException("Cannot support indexing more than 2G rows!")
@@ -64,49 +79,22 @@ private[index] case class BTreeIndexRecordWriter(
     flush()
     fileWriter.close()
   }
-
-  private[index] def sortUniqueKeys(): (Seq[InternalRow], Seq[InternalRow]) = {
-    def buildOrdering(keySchema: StructType): Ordering[InternalRow] = {
-      // here i change to use param id to index_id to get data type in keySchema
-      val order = keySchema.zipWithIndex.map {
-        case (field, index) => SortOrder(
-          BoundReference(index, field.dataType, nullable = true),
-          if (!field.metadata.contains("isAscending") || field.metadata.getBoolean("isAscending")) {
-            Ascending
-          } else {
-            Descending
-          }
-        )
-      }
-      GenerateOrdering.generate(order, keySchema.toAttributes)
-    }
-
-    lazy val ordering = buildOrdering(keySchema)
-    val partitionUniqueSize = multiHashMap.keySet().size()
-    val uniqueKeys = multiHashMap.keySet().toArray(new Array[InternalRow](partitionUniqueSize))
-    assert(uniqueKeys.size == partitionUniqueSize)
-    val (nullKeys, nonNullKeys) = uniqueKeys.partition(_.anyNull)
-    assert(nullKeys.length + nonNullKeys.length == partitionUniqueSize)
-    require(
-      nullKeys.isEmpty || keySchema.length == 1,
-      "No support for multi-column index building with null keys!")
-    lazy val comparator: Comparator[InternalRow] = new Comparator[InternalRow]() {
-      override def compare(o1: InternalRow, o2: InternalRow): Int = {
-        if (o1 == null && o2 == null) {
-          0
-        } else if (o1 == null) {
-          -1
-        } else if (o2 == null) {
-          1
+  private def buildOrdering(keySchema: StructType): Ordering[InternalRow] = {
+    // here i change to use param id to index_id to get data type in keySchema
+    val order = keySchema.zipWithIndex.map {
+      case (field, index) => SortOrder(
+        BoundReference(index, field.dataType, nullable = true),
+        if (!field.metadata.contains("isAscending") || field.metadata.getBoolean("isAscending")) {
+          Ascending
         } else {
-          ordering.compare(o1, o2)
+          Descending
         }
-      }
+      )
     }
-    // sort keys
-    java.util.Arrays.sort(nonNullKeys, comparator)
-    (nullKeys.toSeq, nonNullKeys.toSeq)
+    GenerateOrdering.generate(order, keySchema.toAttributes)
   }
+
+  private lazy val ordering = buildOrdering(keySchema)
 
   /**
    * Working Flow:
@@ -118,38 +106,42 @@ private[index] case class BTreeIndexRecordWriter(
    *  5. Call fileWriter.end() to write some meta data (e.g. file offset for each section)
    */
   private[index] def flush(): Unit = {
-    val (nullKeys, nonNullUniqueKeys) = sortUniqueKeys()
-    val treeShape = BTreeUtils.generate2(nonNullUniqueKeys.length)
-    // Trick here. If root node has no child, then write root node as a child.
-    val children = if (treeShape.children.nonEmpty) treeShape.children else treeShape :: Nil
-
+    val sortedIter = externalSorter.iterator
     // Start
     fileWriter.start()
-    // Write Node
-    var startPosInKeyList = 0
-    var startPosInRowList = 0
-    val nodes = children.map { node =>
-      val keyCount = sumKeyCount(node) // total number of keys of this node
-      val nodeUniqueKeys =
-        nonNullUniqueKeys.slice(startPosInKeyList, startPosInKeyList + keyCount)
-      // total number of row ids of this node
-      val rowCount = nodeUniqueKeys.map(multiHashMap.get(_).size()).sum
+    // TODO this could be large, considering writing row id list in a separate file first
+    val rowIdListBuffer = new ByteArrayOutputStream()
+    val nodes = if (sortedIter.hasNext) {
+      val treeSize = externalSorter.getDistinctCount
+      val treeShape = BTreeUtils.generate2(treeSize)
+      // Trick here. If root node has no child, then write root node as a child.
+      val children = if (treeShape.children.nonEmpty) treeShape.children else treeShape :: Nil
 
-      val nodeBuf = serializeNode(nodeUniqueKeys, startPosInRowList)
-      fileWriter.writeNode(nodeBuf)
-      startPosInKeyList += keyCount
-      startPosInRowList += rowCount
-      if (keyCount == 0 || nodeUniqueKeys.isEmpty || nonNullUniqueKeys.isEmpty) {
-        // this node is an empty node
-        BTreeNodeMetaData(0, nodeBuf.length, null, null)
+      // Write Node
+      var startPosInRowList = 0
+      children.map { node =>
+        val keyCount = sumKeyCount(node) // total number of keys of this node
+        // total number of row ids of this node
+        val (rowCount, nodeLength, nodeHead, nodeLast) =
+          serializeNode(sortedIter, keyCount, startPosInRowList, rowIdListBuffer)
+        startPosInRowList += rowCount
+        if (keyCount == 0) {
+          // this node is an empty node
+          BTreeNodeMetaData(0, nodeLength, null, null)
+        } else {
+          BTreeNodeMetaData(rowCount, nodeLength, nodeHead, nodeLast)
+        }
       }
-      else BTreeNodeMetaData(rowCount, nodeBuf.length, nodeUniqueKeys.head, nodeUniqueKeys.last)
+    } else {
+      Seq(BTreeNodeMetaData(0, 0, null, null))
     }
     // Write Row Id List
-    serializeAndWriteRowIdLists(nonNullUniqueKeys ++ nullKeys)
+    fileWriter.writeRowIdList(rowIdListBuffer.toByteArray)
+    nullBitSet.iterator.foreach { x =>
+      fileWriter.writeRowId(IndexUtils.toBytes(x))
+    }
     // Write Footer
-    val nullKeyRowCount = nullKeys.map(multiHashMap.get(_).size()).sum
-    fileWriter.writeFooter(serializeFooter(nullKeyRowCount, nodes))
+    fileWriter.writeFooter(serializeFooter(nullRecordCount, nodes))
     // End
     fileWriter.end()
   }
@@ -170,39 +162,33 @@ private[index] case class BTreeIndexRecordWriter(
    * Key Data For Key #N
    */
   private[index] def serializeNode(
-      uniqueKeys: Seq[InternalRow],
-      startPosInRowList: Int): Array[Byte] = {
+      productIter: Iterator[Product2[InternalRow, Seq[Int]]],
+      keyCount: Int,
+      initRowPos: Int,
+      rowIdListBuffer: ByteArrayOutputStream): (Int, Int, InternalRow, InternalRow) = {
     val buffer = new ByteArrayOutputStream()
     val keyBuffer = new ByteArrayOutputStream()
 
-    IndexUtils.writeInt(buffer, uniqueKeys.length)
-    var rowPos = startPosInRowList
-    uniqueKeys.foreach { key =>
+    IndexUtils.writeInt(buffer, keyCount)
+    var rowPos = 0
+    val uniqueKeys = productIter.take(keyCount).toArray
+    uniqueKeys.foreach { tup =>
       IndexUtils.writeInt(buffer, keyBuffer.size())
-      IndexUtils.writeInt(buffer, rowPos)
-      nnkw.writeKey(keyBuffer, key)
-      rowPos += multiHashMap.get(key).size()
+      IndexUtils.writeInt(buffer, initRowPos + rowPos)
+      nnkw.writeKey(keyBuffer, tup._1)
+      rowPos += tup._2.size
+      tup._2.foreach { x =>
+        IndexUtils.writeInt(rowIdListBuffer, x)
+      }
     }
-    buffer.toByteArray ++ keyBuffer.toByteArray
+    val byteArray = buffer.toByteArray ++ keyBuffer.toByteArray
+    fileWriter.writeNode(byteArray)
+    (rowPos, byteArray.length, uniqueKeys.head._1, uniqueKeys.last._1)
   }
 
   // TODO: BTreeNode can be re-write. It doesn't carry any values.
   private def sumKeyCount(node: BTreeNode): Int = {
     if (node.children.nonEmpty) node.children.map(sumKeyCount).sum else node.root
-  }
-
-  /**
-   * Example of Row Id List:
-   * Row Id: 0 1 2 3 4 5 6 7 8 9
-   * Key:    1 2 3 4 1 2 3 4 1 2
-   * Then Row Id List is Stored as: 0481592637
-   */
-  private def serializeAndWriteRowIdLists(uniqueKeys: Seq[InternalRow]): Unit = {
-    uniqueKeys.foreach { key =>
-      multiHashMap.get(key).asScala.foreach(x =>
-        fileWriter.writeRowId(IndexUtils.toBytes(x))
-      )
-    }
   }
 
   /**

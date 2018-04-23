@@ -23,13 +23,16 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark._
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCache
+import org.apache.spark.sql.test.oap.SharedOapContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class BTreeRecordReaderWriterSuite extends SparkFunSuite {
+class BTreeRecordReaderWriterSuite extends SparkFunSuite with SharedOapContext {
 
   private lazy val random = new Random(0)
   /**
@@ -54,6 +57,22 @@ class BTreeRecordReaderWriterSuite extends SparkFunSuite {
   private val fileWriter = {
     val configuration = new Configuration()
     val fileWriter = new TestBTreeIndexFileWriter(configuration)
+    // initialize SparkSession so we have SparkEnv for external sorter
+    createSparkSession
+    val conf = spark.sparkContext.conf
+    // set TaskContext for external sorter
+    TaskContext.setTaskContext(
+      new TaskContextImpl(
+        0,
+        0,
+        0,
+        0,
+        new TaskMemoryManager(new TestMemoryManager(conf), 0),
+        null,
+        MetricsSystem.createMetricsSystem(
+          "BTreeRecordReaderWriterSuite",
+          conf,
+          new SecurityManager(conf))))
     val writer = BTreeIndexRecordWriter(configuration, fileWriter, schema)
     nonNullKeyRecords.map(InternalRow(_)).foreach(writer.write(null, _))
     nullKeyRecords.map(InternalRow(_)).foreach(writer.write(null, _))
