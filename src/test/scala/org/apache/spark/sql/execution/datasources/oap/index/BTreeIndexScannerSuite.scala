@@ -53,6 +53,7 @@ class BTreeIndexScannerSuite extends SharedOapContext {
           new SecurityManager(conf))))
   }
   override def afterEach(): Unit = {
+    TaskContext.get().asInstanceOf[TaskContextImpl].markTaskCompleted()
     TaskContext.unset()
   }
 
