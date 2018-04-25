@@ -31,18 +31,12 @@ class ColumnValues(defaultSize: Int, dataType: DataType, val buffer: FiberCache)
   // for any FiberData, the first defaultSize / 8 will be the bitmask
   // TODO what if defaultSize / 8 is not an integer?
 
-  // TODO get the bitset from the FiberByteData
-  val bitset: BitSet = {
-    val bs = new BitSet(defaultSize)
-    val longs = bs.toLongArray()
-    buffer.copyMemoryToLongs(0, longs)
+  private val dataOffset = (((defaultSize - 1) >> 6) + 1) * 8
 
-    bs
+  def isNullAt(idx: Int): Boolean = {
+    val bitmask = 1L << (idx & 0x3f)   // mod 64 and shift
+    (buffer.getLong((idx >> 6) * 8) & bitmask) == 0  // div by 64 and mask
   }
-
-  private val dataOffset = bitset.toLongArray().length * 8
-
-  def isNullAt(idx: Int): Boolean = !bitset.get(idx)
 
   private def genericGet(idx: Int): Any = dataType match {
     case BinaryType => getBinaryValue(idx)
