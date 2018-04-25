@@ -61,7 +61,7 @@ class ClusteredFilterSuite
     checkAnswer(sql("SELECT * FROM oap_test WHERE a >= 300"),
       Row(300, "this is test 300") :: Nil)
 
-    sql("drop oindex index1 on oap_test")
+    // sql("drop oindex index1 on oap_test")
   }
 
 }
