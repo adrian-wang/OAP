@@ -23,8 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 
-import org.apache.spark.{Aggregator, SparkConf, TaskContext}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.{Aggregator, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
