@@ -28,14 +28,13 @@ import org.apache.spark.util.collection.BitSet
 class ColumnValues(defaultSize: Int, dataType: DataType, val buffer: FiberCache) {
   require(dataType.isInstanceOf[AtomicType], s"Only atomic type accepted for now, got $dataType.")
 
-  // for any FiberData, the first defaultSize / 8 will be the bitmask
-  // TODO what if defaultSize / 8 is not an integer?
-
-  private val dataOffset = (((defaultSize - 1) >> 6) + 1) * 8
+  // for any FiberData, the first `(defaultSize - 1) >> 6 + 1` longs will be the bitmask
+  // num of bytes needed to hold defaultSize elements is then `((defaultSize - 1) >> 3) + 8`
+  private val dataOffset = ((defaultSize - 1) >> 3) + 8
 
   def isNullAt(idx: Int): Boolean = {
     val bitmask = 1L << (idx & 0x3f)   // mod 64 and shift
-    (buffer.getLong((idx >> 6) * 8) & bitmask) == 0  // div by 64 and mask
+    (buffer.getLong(idx >> 3) & bitmask) == 0  // div by 64 and mask
   }
 
   private def genericGet(idx: Int): Any = dataType match {
