@@ -121,10 +121,7 @@ class ColumnValues(defaultSize: Int, dataType: DataType, val buffer: FiberCache)
     //    value #N
     val length = getIntValue(idx * 2)
     val offset = getIntValue(idx * 2 + 1)
-    val result = new Array[Byte](length)
-    buffer.copyMemoryToBytes(offset, result)
-
-    result
+    buffer.getBytes(offset, length)
   }
 }
 
