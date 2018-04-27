@@ -1,2 +1,2 @@
 language: java
-script: mvn -DwildcardSuites=org.apache.spark.sql.execution.datasources.oap.cluster.ClusteredFilterSuite test
+script: mvn test
