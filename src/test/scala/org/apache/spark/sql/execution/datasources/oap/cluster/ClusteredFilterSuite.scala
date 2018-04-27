@@ -43,7 +43,7 @@ class ClusteredFilterSuite
   }
 
 
-  ignore("filtering") {
+  test("filtering") {
     val data: Seq[(Int, String)] = (1 to 300).map { i => (i, s"this is test $i") }
     data.toDF("key", "value").createOrReplaceTempView("t")
     sql("insert overwrite table oap_test select * from t")
