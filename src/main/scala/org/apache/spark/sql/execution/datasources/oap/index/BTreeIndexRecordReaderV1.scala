@@ -87,8 +87,6 @@ private[index] case class BTreeIndexRecordReaderV1(
   private def getIntFromBuffer(buffer: Array[Byte], offset: Int) =
     Platform.getInt(buffer, Platform.BYTE_ARRAY_OFFSET + offset)
 
-  def getFooterFiber: FiberCache = footerCache.fc
-
   private[index] def readFooter() =
     fileReader.readFiberCache(meta.footerOffset, meta.footerLength)
 
