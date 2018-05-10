@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.oap.listener
+package org.apache.spark.sql.oap.ui
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerCustomInfoUpdate}
-import org.apache.spark.sql.execution.datasources.oap.filecache.{FiberCacheManagerSensor, FiberSensor}
+import org.apache.spark.internal.Logging
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-class FiberInfoListener extends SparkListener {
-  override def onCustomInfoUpdate(fiberInfo: SparkListenerCustomInfoUpdate): Unit = {
-    if (fiberInfo.clazzName.contains("OapFiberCacheHeartBeatMessager")) {
-      FiberSensor.update(fiberInfo)
-    } else if (fiberInfo.clazzName.contains("FiberCacheManagerMessager")) {
-      FiberCacheManagerSensor.update(fiberInfo)
-    }
-  }
+class OapTab(parent: SparkUI) extends SparkUITab(parent, "OAP") with Logging {
 
-  // TODO: implements other events like `onExecutorAdded`, `onExecutorRemoved`, etc. to maintain
-  // the whole info picture on driver side.
+  val listener = parent.executorsListener
+
+  attachPage(new FiberCacheManagerPage(this))
+
+  parent.attachTab(this)
+  parent.addStaticHandler(OapTab.STATIC_RESOURCE_DIR, "/static/oap")
+}
+
+object OapTab {
+  private val STATIC_RESOURCE_DIR = "oap/static"
 }
