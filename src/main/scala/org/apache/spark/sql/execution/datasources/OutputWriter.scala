@@ -87,7 +87,9 @@ abstract class OutputWriter {
    * Closes the [[OutputWriter]]. Invoked on the executor side after all rows are persisted, before
    * the task output is committed.
    */
-  def close(): WriteResult
+  def close(): Unit
+
+  def writeStatus(): WriteResult = { }
 
   private var converter: InternalRow => Row = _
 
