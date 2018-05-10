@@ -33,4 +33,6 @@ private[index] case class IndexFileWriterImpl(
 
   // Give RecordWriter a chance which file it's writing to.
   override def getName: String = indexPath.toString
+
+  override def fileName: Path = indexPath
 }

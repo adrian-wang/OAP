@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.oap.index
 
 import java.io.OutputStream
 
+import org.apache.hadoop.fs.Path
+
 private[index] trait IndexFileWriter {
 
   protected def os: OutputStream
@@ -32,4 +34,6 @@ private[index] trait IndexFileWriter {
   def writeLong(value: Long): Unit = IndexUtils.writeLong(os, value)
 
   def close(): Unit = os.close()
+
+  def fileName(): Path = _
 }

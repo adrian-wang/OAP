@@ -127,6 +127,7 @@ private[index] case class BTreeIndexRecordWriter(
     fileWriter.write(IndexUtils.serializeVersion(IndexFile.VERSION_NUM))
     // TODO this could be large, considering writing row id list in a separate file first
     val rowIdListBuffer = new ByteArrayOutputStream()
+    val indexfile = fileWriter.fileName()
     val nodes = if (sortedIter.nonEmpty) {
       val treeSize = externalSorter.getDistinctCount
       val treeShape = BTreeUtils.generate2(treeSize)
