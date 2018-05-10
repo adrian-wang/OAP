@@ -89,6 +89,10 @@ abstract class OutputWriter {
    */
   def close(): Unit
 
+  /**
+   * This is to collect data for meta when OAP writing or index writing.
+   * Can be replaced with datasource v2 api from Spark 2.3
+   */
   def writeStatus(): WriteResult = { }
 
   private var converter: InternalRow => Row = _

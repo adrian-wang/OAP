@@ -73,7 +73,7 @@ private[index] class OapIndexOutputWriter(
     closeWriter()
   }
 
-  def writeStatus(): Seq[IndexBuildResult] = {
+  override def writeStatus(): Seq[IndexBuildResult] = {
     results
   }
 
