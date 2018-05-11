@@ -49,6 +49,13 @@ class BTreeRecordReaderWriterV1Suite extends SharedOapContext {
     }
 
     override def getName: String = "Memory File Writer"
+    // Only for create row id temp file use.
+    override def tempRowIdWriter: IndexFileWriter = new TestIndexFileWriter()
+
+    override def writeRowId(tempWriter: IndexFileWriter): Unit = {
+      val tempBytes = tempWriter.asInstanceOf[TestIndexFileWriter].toByteArray
+      os.write(tempBytes)
+    }
   }
 
   /**
