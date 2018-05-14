@@ -42,7 +42,6 @@ private[index] case class IndexFileWriterImpl(
   override def writeRowId(tempWriter: IndexFileWriter): Unit = {
     val path = new Path(tempWriter.getName)
     val is = path.getFileSystem(configuration).open(path)
-    var start = 0
     val length = path.getFileSystem(configuration).getFileStatus(path).getLen
     val bufSize = configuration.getInt("io.file.buffer.size", 4096)
     val bytes = new Array[Byte](bufSize)
@@ -52,7 +51,6 @@ private[index] case class IndexFileWriterImpl(
       is.readFully(bytes, 0, readSize)
       os.write(bytes, 0, readSize)
       remaining -= readSize
-      start += readSize
     }
     is.close()
     path.getFileSystem(configuration).delete(path, false)
