@@ -19,14 +19,12 @@ package org.apache.spark.sql.execution.datasources.oap
 
 import java.net.URI
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
-import org.apache.parquet.hadoop.util.SerializationUtil
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
@@ -52,11 +50,18 @@ private[sql] class OapFileFormat extends FileFormat
 
   val oapMetrics = new OapMetrics
 
-  override def initialize(
+  private var initialized = false
+  @transient protected var options: Map[String, String] = _
+  @transient protected var sparkSession: SparkSession = _
+  @transient protected var files: Seq[FileStatus] = _
+
+  def init(
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): FileFormat = {
-    super.initialize(sparkSession, options, files)
+    this.sparkSession = sparkSession
+    this.options = options
+    this.files = files
 
     val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
     // TODO
@@ -76,8 +81,19 @@ private[sql] class OapFileFormat extends FileFormat
 
     // OapFileFormat.serializeDataSourceMeta(hadoopConf, meta)
     inferSchema = meta.map(_.schema)
+    initialized = true
 
     this
+  }
+
+  override def inferSchema(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Option[StructType] = {
+    if (!initialized) {
+      init(sparkSession, options, files)
+    }
+    inferSchema
   }
 
   // TODO inferSchema could be lazy computed
@@ -104,7 +120,6 @@ private[sql] class OapFileFormat extends FileFormat
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
 
-    // TODO: Should we have our own config util instead of SqlConf?
     // First use table option, if not, use SqlConf, else, use default value.
     conf.set(OapFileFormat.COMPRESSION, options.getOrElse("compression",
       sparkSession.conf.get(OapConf.OAP_COMPRESSION.key, OapFileFormat.DEFAULT_COMPRESSION)))
@@ -286,12 +301,14 @@ private[sql] class OapFileFormat extends FileFormat
         val requiredIds = requiredSchema.map(dataSchema.fields.indexOf(_)).toArray
         val pushed = FilterHelper.tryToPushFilters(sparkSession, requiredSchema, filters)
 
-        // refer to ParquetFileFormat, use resultSchema to decide if this query support
-        // Vectorized Read and returningBatch.
+        // Refer to ParquetFileFormat, use resultSchema to decide if this query support
+        // Vectorized Read and returningBatch. Also it depends on WHOLE_STAGE_CODE_GEN,
+        // as the essential unsafe projection is done by that.
         val resultSchema = StructType(partitionSchema.fields ++ requiredSchema.fields)
         val enableVectorizedReader: Boolean =
           m.dataReaderClassName.equals(OapFileFormat.PARQUET_DATA_FILE_CLASSNAME) &&
           sparkSession.sessionState.conf.parquetVectorizedReaderEnabled &&
+          sparkSession.sessionState.conf.wholeStageEnabled &&
           resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
         val returningBatch = supportBatch(sparkSession, resultSchema)
         val parquetDataCacheEnable = sparkSession.conf.get(OapConf.OAP_PARQUET_DATA_CACHE_ENABLED)
@@ -525,8 +542,11 @@ private[oap] class OapOutputWriter(
     writer.write(row)
   }
 
-  override def close(): WriteResult = {
+  override def close(): Unit = {
     writer.close()
+  }
+
+  override def writeStatus(): WriteResult = {
     OapWriteResult(dataFileName, rowCount, partitionString)
   }
 
@@ -536,10 +556,7 @@ private[oap] class OapOutputWriter(
 private[sql] object OapFileFormat {
   val OAP_DATA_EXTENSION = ".data"
   val OAP_INDEX_EXTENSION = ".index"
-  val OAP_META_EXTENSION = ".meta"
   val OAP_META_FILE = ".oap.meta"
-  val OAP_META_SCHEMA = "oap.schema"
-  val OAP_DATA_SOURCE_META = "oap.meta.datasource"
   val OAP_DATA_FILE_CLASSNAME = classOf[OapDataFile].getCanonicalName
   val PARQUET_DATA_FILE_CLASSNAME = classOf[ParquetDataFile].getCanonicalName
 
@@ -547,14 +564,6 @@ private[sql] object OapFileFormat {
   val DEFAULT_COMPRESSION = OapConf.OAP_COMPRESSION.defaultValueString
   val ROW_GROUP_SIZE = "oap.rowgroup.size"
   val DEFAULT_ROW_GROUP_SIZE = OapConf.OAP_ROW_GROUP_SIZE.defaultValueString
-
-  def serializeDataSourceMeta(conf: Configuration, meta: Option[DataSourceMeta]): Unit = {
-    SerializationUtil.writeObjectToConfAsBase64(OAP_DATA_SOURCE_META, meta, conf)
-  }
-
-  def deserializeDataSourceMeta(conf: Configuration): Option[DataSourceMeta] = {
-    SerializationUtil.readObjectFromConfAsBase64(OAP_DATA_SOURCE_META, conf)
-  }
 
   /**
    * Oap Optimization Options.

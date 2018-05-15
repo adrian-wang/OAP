@@ -60,8 +60,8 @@ private[index] case class BTreeIndexRecordWriter(
   private lazy val nnkw = new NonNullKeyWriter(keySchema)
 
   private val combiner: Int => Seq[Int] = Seq(_)
-  private val merger: (Seq[Int], Int) => Seq[Int] = (seq, i) => seq :+ i
-  private val mergeCombiner: (Seq[Int], Seq[Int]) => Seq[Int] = (s1, s2) => s1 ++ s2
+  private val merger: (Seq[Int], Int) => Seq[Int] = _ :+ _
+  private val mergeCombiner: (Seq[Int], Seq[Int]) => Seq[Int] = _ ++ _
   private val aggregator =
     new Aggregator[InternalRow, Int, Seq[Int]](combiner, merger, mergeCombiner)
   private val externalSorter = {
@@ -114,7 +114,6 @@ private[index] case class BTreeIndexRecordWriter(
     GenerateOrdering.generate(order, keySchema.toAttributes)
   }
 
-
   private lazy val ordering = buildOrdering(keySchema)
 
   /**
@@ -130,34 +129,34 @@ private[index] case class BTreeIndexRecordWriter(
     val sortedIter = externalSorter.iterator
     // Start
     fileWriter.write(IndexUtils.serializeVersion(IndexFile.VERSION_NUM))
-    // TODO this could be large, considering writing row id list in a separate file first
-    val rowIdListBuffer = new ByteArrayOutputStream()
-    val nodes = if (sortedIter.hasNext) {
+    val tempIdWriter = fileWriter.tempRowIdWriter()
+    var startPosInRowList = 0
+    val nodes = if (sortedIter.nonEmpty) {
       val treeSize = externalSorter.getDistinctCount
       val treeShape = BTreeUtils.generate2(treeSize)
       // Trick here. If root node has no child, then write root node as a child.
       val children = if (treeShape.children.nonEmpty) treeShape.children else treeShape :: Nil
 
       // Write Node
-      var startPosInRowList = 0
       children.map { node =>
         val keyCount = sumKeyCount(node) // total number of keys of this node
-        // total number of row ids of this node
-        val (rowCount, nodeLength, nodeHead, nodeLast) =
-          serializeNode(sortedIter, keyCount, startPosInRowList, rowIdListBuffer)
-        startPosInRowList += rowCount
         if (keyCount == 0) {
           // this node is an empty node
-          BTreeNodeMetaData(0, nodeLength, null, null)
+          BTreeNodeMetaData(0, 0, null, null)
         } else {
-          BTreeNodeMetaData(rowCount, nodeLength, nodeHead, nodeLast)
+          val nodeUniqueKeys = sortedIter.take(keyCount).toArray
+          val bTreeNodeMetaData =
+            serializeNode(nodeUniqueKeys, startPosInRowList, tempIdWriter)
+          startPosInRowList += bTreeNodeMetaData.rowCount
+          bTreeNodeMetaData
         }
       }
     } else {
       Seq(BTreeNodeMetaData(0, 0, null, null))
     }
+    tempIdWriter.close()
     // Write Row Id List
-    fileWriter.write(rowIdListBuffer.toByteArray)
+    fileWriter.writeRowId(tempIdWriter)
     var nullIdSize = 0
     nullBitSet.iterator.foreach { x =>
       fileWriter.write(IndexUtils.toBytes(x))
@@ -167,7 +166,7 @@ private[index] case class BTreeIndexRecordWriter(
     val footerBuf = serializeFooter(nullRecordCount, nodes)
     fileWriter.write(footerBuf)
     // Write index file meta: footer size, row id list size
-    fileWriter.writeLong(rowIdListBuffer.size + nullIdSize)
+    fileWriter.writeLong(startPosInRowList * IndexUtils.INT_SIZE + nullIdSize)
     fileWriter.writeInt(footerBuf.length)
   }
 
@@ -185,30 +184,32 @@ private[index] case class BTreeIndexRecordWriter(
    * Key Data For Key #1
    * ...
    * Key Data For Key #N
+   * @param uniqueKeys keys to write into a btree node
+   * @param initRowPos the starting position of row ids for this node
+   * @param rowIdListWriter the writer to write row id list
+   * @return BTreeNodeMetaData
    */
   private[index] def serializeNode(
-      productIter: Iterator[Product2[InternalRow, Seq[Int]]],
-      keyCount: Int,
+      uniqueKeys: Array[Product2[InternalRow, Seq[Int]]],
       initRowPos: Int,
-      rowIdListBuffer: ByteArrayOutputStream): (Int, Int, InternalRow, InternalRow) = {
+      rowIdListWriter: IndexFileWriter): BTreeNodeMetaData = {
     val buffer = new ByteArrayOutputStream()
     val keyBuffer = new ByteArrayOutputStream()
 
-    IndexUtils.writeInt(buffer, keyCount)
+    IndexUtils.writeInt(buffer, uniqueKeys.length)
     var rowPos = 0
-    val uniqueKeys = productIter.take(keyCount).toArray
     uniqueKeys.foreach { tup =>
       IndexUtils.writeInt(buffer, keyBuffer.size())
       IndexUtils.writeInt(buffer, initRowPos + rowPos)
       nnkw.writeKey(keyBuffer, tup._1)
       rowPos += tup._2.size
       tup._2.foreach { x =>
-        IndexUtils.writeInt(rowIdListBuffer, x)
+        rowIdListWriter.writeInt(x)
       }
     }
     val byteArray = buffer.toByteArray ++ keyBuffer.toByteArray
     fileWriter.write(byteArray)
-    (rowPos, byteArray.length, uniqueKeys.head._1, uniqueKeys.last._1)
+    BTreeNodeMetaData(rowPos, byteArray.length, uniqueKeys.head._1, uniqueKeys.last._1)
   }
 
   // TODO: BTreeNode can be re-write. It doesn't carry any values.

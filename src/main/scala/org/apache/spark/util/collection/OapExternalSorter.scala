@@ -32,58 +32,10 @@ import org.apache.spark.serializer._
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
 /**
- * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
- * pairs of type (K, C). Uses a Partitioner to first group the keys into partitions, and then
- * optionally sorts keys within each partition using a custom Comparator. Can output a single
- * partitioned file with a different byte range for each partition, suitable for shuffle fetches.
- *
- * If combining is disabled, the type C must equal V -- we'll cast the objects at the end.
- *
- * Note: Although ExternalSorter is a fairly generic sorter, some of its configuration is tied
- * to its use in sort-based shuffle (for example, its block compression is controlled by
- * `spark.shuffle.compress`).  We may need to revisit this if ExternalSorter is used in other
- * non-shuffle contexts where we might want to use different configuration settings.
- *
- * @param aggregator optional Aggregator with combine functions to use for merging data
- * @param ordering optional Ordering to sort keys within each partition; should be a total ordering
- * @param serializer serializer to use when spilling to disk
- *
- * Note that if an Ordering is given, we'll always sort using it, so only provide it if you really
- * want the output keys to be sorted. In a map task without map-side combine for example, you
- * probably want to pass None as the ordering to avoid extra sorting. On the other hand, if you do
- * want to do combining, having an Ordering is more efficient than not having it.
- *
- * Users interact with this class in the following way:
- *
- * 1. Instantiate an ExternalSorter.
- *
- * 2. Call insertAll() with a set of records.
- *
- * 3. Request an iterator() back to traverse sorted/aggregated records.
- *     - or -
- *    Invoke writePartitionedFile() to create a file containing sorted/aggregated outputs
- *    that can be used in Spark's sort shuffle.
- *
- * At a high level, this class works internally as follows:
- *
- *  - We repeatedly fill up buffers of in-memory data, using either a PartitionedAppendOnlyMap if
- *    we want to combine by key, or a PartitionedPairBuffer if we don't.
- *    Inside these buffers, we sort elements by partition ID and then possibly also by key.
- *    To avoid calling the partitioner multiple times with each key, we store the partition ID
- *    alongside each record.
- *
- *  - When each buffer reaches our memory limit, we spill it to a file. This file is sorted first
- *    by partition ID and possibly second by key or by hash code of the key, if we want to do
- *    aggregation. For each file, we track how many objects were in each partition in memory, so we
- *    don't have to write out the partition ID for every element.
- *
- *  - When the user requests an iterator or file output, the spilled files are merged, along with
- *    any remaining in-memory data, using the same sort order defined above (unless both sorting
- *    and aggregation are disabled). If we need to aggregate by key, we either use a total ordering
- *    from the ordering parameter, or read the keys with the same hash code and compare them with
- *    each other for equality to merge values.
- *
- *  - Users are expected to call stop() at the end to delete all the intermediate files.
+ * This is a copy of [[ExternalSorter]] in OAP, with 3 things changed:
+ * 1. not support partitioner because no need.
+ * 2. add unique count for easy use.
+ * 3. delete `insertAll` and add `insert` for use.
  */
 private[spark] class OapExternalSorter[K, V, C](
     context: TaskContext,

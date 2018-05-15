@@ -22,7 +22,8 @@ import scala.collection.mutable
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
-import org.apache.spark.scheduler.{SparkListenerCustomInfoUpdate, SparkListenerOapIndexInfoUpdate}
+import org.apache.spark.scheduler.LiveListenerBus
+import org.apache.spark.sql.oap.listener.{SparkListenerCustomInfoUpdate, SparkListenerOapIndexInfoUpdate}
 import org.apache.spark.sql.oap.rpc.OapMessages._
 
 /**
@@ -39,8 +40,9 @@ private[spark] class OapRpcManagerMaster(oapRpcManagerMasterEndpoint: OapRpcMana
     }
   }
 
-  override private[spark] def send(message: OapMessage): Unit =
+  override private[spark] def send(message: OapMessage): Unit = {
     sendOneWayMessageToExecutors(message)
+  }
 }
 
 private[spark] object OapRpcManagerMaster {
@@ -48,7 +50,9 @@ private[spark] object OapRpcManagerMaster {
 }
 
 private[spark] class OapRpcManagerMasterEndpoint(
-    override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint with Logging {
+    override val rpcEnv: RpcEnv,
+    listenerBus: LiveListenerBus)
+  extends ThreadSafeRpcEndpoint with Logging {
 
   // Mapping from executor ID to RpcEndpointRef.
   private[rpc] val rpcEndpointRefByExecutor = new mutable.HashMap[String, RpcEndpointRef]
@@ -81,13 +85,13 @@ private[spark] class OapRpcManagerMasterEndpoint(
 
   private def handleHeartbeat(heartbeat: Heartbeat) = heartbeat match {
     case FiberCacheHeartbeat(executorId, blockManagerId, content) =>
-      SparkContext.getOrCreate().listenerBus.post(SparkListenerCustomInfoUpdate(
+      listenerBus.post(SparkListenerCustomInfoUpdate(
         blockManagerId.host, executorId, "OapFiberCacheHeartBeatMessager", content))
     case FiberCacheMetricsHeartbeat(executorId, blockManagerId, content) =>
-      SparkContext.getOrCreate().listenerBus.post(SparkListenerCustomInfoUpdate(
+      listenerBus.post(SparkListenerCustomInfoUpdate(
         blockManagerId.host, executorId, "FiberCacheManagerMessager", content))
     case IndexHeartbeat(executorId, blockManagerId, content) =>
-      SparkContext.getOrCreate().listenerBus.post(SparkListenerOapIndexInfoUpdate(
+      listenerBus.post(SparkListenerOapIndexInfoUpdate(
         blockManagerId.host, executorId, content))
     case _ =>
   }
