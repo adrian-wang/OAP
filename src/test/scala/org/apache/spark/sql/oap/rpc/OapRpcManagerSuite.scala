@@ -18,12 +18,16 @@
 package org.apache.spark.sql.oap.rpc
 
 import org.apache.spark._
+
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.oap.rpc.OapMessages.{DummyHeartbeat, DummyMessage, Heartbeat, RegisterOapRpcManager}
 import org.mockito.Mockito._
 import org.mockito.internal.verification.AtLeast
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+
+import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
+import org.apache.spark.sql.oap.OapRuntime
 
 class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with PrivateMethodTester
     with LocalSparkContext {
@@ -107,7 +111,7 @@ class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with Priv
   }
 
   private def addSpiedRpcManagerSlaveEndpoint(executorId: String): OapRpcManagerSlaveEndpoint = {
-    val rpcManagerSlaveEndpoint = spy(new OapRpcManagerSlaveEndpoint(rpcEnv))
+    val rpcManagerSlaveEndpoint = spy(new OapRpcManagerSlaveEndpoint(rpcEnv, null))
     val slaveEndpoint = rpcEnv.setupEndpoint(
       s"OapRpcManagerSlave_$executorId", rpcManagerSlaveEndpoint)
     rpcDriverEndpoint.askWithRetry[Boolean](RegisterOapRpcManager(executorId, slaveEndpoint))
@@ -117,7 +121,7 @@ class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with Priv
   // This doesn't need to be spied due to it's used to send messages
   private def addRpcManagerSlave(executorId: String): OapRpcManagerSlave = {
     new OapRpcManagerSlave(
-      rpcEnv, rpcDriverEndpoint, executorId, SparkEnv.get.blockManager, sc.conf) {
+      rpcEnv, rpcDriverEndpoint, executorId, SparkEnv.get.blockManager, null, sc.conf) {
       override def heartbeatMessages: Array[() => Heartbeat] = { Array(() => heartbeat) }
     }
   }
