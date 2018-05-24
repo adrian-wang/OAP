@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.oap.rpc
 
-import org.apache.spark._
-
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
-import org.apache.spark.sql.internal.oap.OapConf
-import org.apache.spark.sql.oap.rpc.OapMessages.{DummyHeartbeat, DummyMessage, Heartbeat, RegisterOapRpcManager}
 import org.mockito.Mockito._
 import org.mockito.internal.verification.AtLeast
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
-import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
-import org.apache.spark.sql.oap.OapRuntime
+import org.apache.spark._
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
+import org.apache.spark.sql.internal.oap.OapConf
+import org.apache.spark.sql.oap.rpc.OapMessages.{DummyHeartbeat, DummyMessage, Heartbeat, RegisterOapRpcManager}
+
 
 class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with PrivateMethodTester
     with LocalSparkContext {
