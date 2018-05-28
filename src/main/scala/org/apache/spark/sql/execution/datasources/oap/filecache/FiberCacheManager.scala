@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.execution.datasources.oap.io._
 import org.apache.spark.sql.execution.datasources.oap.utils.CacheStatusSerDe
+import org.apache.spark.sql.oap.OapRuntime
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -151,7 +152,7 @@ private[sql] class FiberCacheManager(
     // The final bit set is: 010010001
     val statusRawData = dataFibers.groupBy(_.file).map {
       case (dataFile, fiberSet) =>
-        val fileMeta: DataFileMeta = DataFileMetaCacheManager(dataFile)
+        val fileMeta: DataFileMeta = OapRuntime.getOrCreate.dataFileMetaCacheManager(dataFile)
         val fiberBitSet = new BitSet(fileMeta.getGroupCount * fileMeta.getFieldCount)
         fiberSet.foreach(fiber =>
           fiberBitSet.set(fiber.columnIndex + fileMeta.getFieldCount * fiber.rowGroupId))
@@ -177,7 +178,7 @@ private[sql] class FiberCacheManager(
   }
 }
 
-private[oap] object DataFileMetaCacheManager extends Logging {
+private[sql] class DataFileMetaCacheManager extends Logging {
   type ENTRY = DataFile
 
   private val _cacheSize: AtomicLong = new AtomicLong(0)
@@ -210,9 +211,13 @@ private[oap] object DataFileMetaCacheManager extends Logging {
   def apply(fiberCache: DataFile): DataFileMeta = {
     cache.get(fiberCache)
   }
+
+  def stop(): Unit = {
+    cache.cleanUp()
+  }
 }
 
-object FiberLockManager {
+private[sql] class FiberLockManager {
   private val lockMap = new ConcurrentHashMap[Fiber, ReentrantReadWriteLock]()
   def getFiberLock(fiber: Fiber): ReentrantReadWriteLock = {
     var lock = lockMap.get(fiber)

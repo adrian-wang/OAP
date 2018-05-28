@@ -21,14 +21,14 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.execution.datasources.oap.OapMetricsManager
-import org.apache.spark.sql.execution.datasources.oap.filecache.{FiberCacheManager, FiberSensor, MemoryManager}
-import org.apache.spark.sql.oap.rpc.{OapRpcManager, OapRpcManagerMaster, OapRpcManagerMasterEndpoint, OapRpcManagerSlave}
+import org.apache.spark.sql.execution.datasources.oap.filecache._
+import org.apache.spark.sql.oap.rpc._
 import org.apache.spark.util.{RpcUtils, Utils}
 
 
 /**
- * Initializing [[FiberCacheManager]], [[MemoryManager]],
- * [[FiberSensor]], [[OapMetricsManager]], [[OapRpcManager]]
+ * Initializing [[FiberCacheManager]], [[MemoryManager]], [[FiberLockManager]]
+ * [[FiberSensor]], [[OapMetricsManager]], [[OapRpcManager]], [[DataFileMetaCacheManager]]
  */
 private[oap] trait OapRuntime extends Logging {
   val memoryManager: MemoryManager
@@ -36,6 +36,9 @@ private[oap] trait OapRuntime extends Logging {
   val fiberSensor: FiberSensor
   val oapRpcManager: OapRpcManager
   val oapMetricsManager: OapMetricsManager
+  // TODO are the following needed for driver?
+  val dataFileMetaCacheManager = new DataFileMetaCacheManager
+  val fiberLockManager = new FiberLockManager
   def stop(): Unit
 }
 
@@ -43,16 +46,10 @@ private[oap] trait OapRuntime extends Logging {
  * Initializing [[FiberSensor]] and executor managers if local
  */
 private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime {
-  override val memoryManager = if (OapRuntime.isLocal(sparkEnv.conf)) {
-    new MemoryManager(sparkEnv)
-  } else {
-    null
-  }
-  override val fiberCacheManager = if (OapRuntime.isLocal(sparkEnv.conf)) {
-    new FiberCacheManager(sparkEnv, memoryManager)
-  } else {
-    null
-  }
+  override val memoryManager =
+    if (OapRuntime.isLocal(sparkEnv.conf)) new MemoryManager(sparkEnv) else null
+  override val fiberCacheManager =
+    if (OapRuntime.isLocal(sparkEnv.conf)) new FiberCacheManager(sparkEnv, memoryManager) else null
   override val fiberSensor = new FiberSensor
   private val oapRpcManagerMasterEndpoint =
     new OapRpcManagerMasterEndpoint(sparkEnv.rpcEnv, SparkContext.getOrCreate().listenerBus)
@@ -75,13 +72,14 @@ private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime {
   override val oapMetricsManager = new OapMetricsManager
 
   override def stop(): Unit = {
-    if (OapRuntime.isLocal(sparkEnv.conf) && memoryManager != null) {
+    if (OapRuntime.isLocal(sparkEnv.conf)) {
       memoryManager.stop()
     }
-    if (OapRuntime.isLocal(sparkEnv.conf) && fiberCacheManager != null) {
+    if (OapRuntime.isLocal(sparkEnv.conf)) {
       fiberCacheManager.stop()
     }
     oapRpcManager.stop()
+    dataFileMetaCacheManager.stop()
   }
 }
 
@@ -101,22 +99,18 @@ private[oap] class OapExecutorRuntime(sparkEnv: SparkEnv) extends OapRuntime {
     fiberCacheManager,
     sparkEnv.conf)
   override val oapMetricsManager = new OapMetricsManager
-  override val fiberSensor = throw new NotImplementedError("No fiberSensor for executor!")
+  override val fiberSensor = null
 
   override def stop(): Unit = {
-    if (memoryManager != null) {
-      memoryManager.stop()
-    }
-    if (fiberCacheManager != null) {
-      fiberCacheManager.stop()
-    }
+    memoryManager.stop()
+    fiberCacheManager.stop()
     oapRpcManager.stop()
+    dataFileMetaCacheManager.stop()
   }
 }
 
 object OapRuntime {
   private var rt: OapRuntime = _
-  private var stopped: Boolean = true
   /**
    * user transparent initialization
    */
@@ -140,7 +134,6 @@ object OapRuntime {
     } else {
       new OapExecutorRuntime(sparkEnv)
     }
-    stopped = false
     rt
   }
 
@@ -167,7 +160,6 @@ object OapRuntime {
       // we can always use it.
       rt = null
       runtime.stop()
-      stopped = true
     }
   }
 }
