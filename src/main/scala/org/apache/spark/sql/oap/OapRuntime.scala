@@ -30,30 +30,30 @@ import org.apache.spark.util.{RpcUtils, Utils}
  * Initializing [[FiberCacheManager]], [[MemoryManager]],
  * [[FiberSensor]], [[OapMetricsManager]], [[OapRpcManager]]
  */
-private[oap] abstract class OapRuntime(sparkEnv: SparkEnv) extends Logging {
-  var memoryManager: MemoryManager = _
-  var fiberCacheManager: FiberCacheManager = _
-  var fiberSensor: FiberSensor = _
-  var oapRpcManager: OapRpcManager = _
-  var oapMetricsManager: OapMetricsManager = _
+private[oap] trait OapRuntime extends Logging {
+  val memoryManager: MemoryManager
+  val fiberCacheManager: FiberCacheManager
+  val fiberSensor: FiberSensor
+  val oapRpcManager: OapRpcManager
+  val oapMetricsManager: OapMetricsManager
   def stop(): Unit
 }
 
 /**
  * Initializing [[FiberSensor]] and executor managers if local
  */
-private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime(sparkEnv) {
-  memoryManager = if (OapRuntime.isLocal(sparkEnv.conf)) {
+private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime {
+  override val memoryManager = if (OapRuntime.isLocal(sparkEnv.conf)) {
     new MemoryManager(sparkEnv)
   } else {
     null
   }
-  fiberCacheManager = if (OapRuntime.isLocal(sparkEnv.conf)) {
+  override val fiberCacheManager = if (OapRuntime.isLocal(sparkEnv.conf)) {
     new FiberCacheManager(sparkEnv, memoryManager)
   } else {
     null
   }
-  fiberSensor = new FiberSensor
+  override val fiberSensor = new FiberSensor
   private val oapRpcManagerMasterEndpoint =
     new OapRpcManagerMasterEndpoint(sparkEnv.rpcEnv, SparkContext.getOrCreate().listenerBus)
   private val oapRpcDriverEndpoint = {
@@ -61,7 +61,7 @@ private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime(spark
     sparkEnv.rpcEnv.setupEndpoint(
       OapRpcManagerMaster.DRIVER_ENDPOINT_NAME, oapRpcManagerMasterEndpoint)
   }
-  oapRpcManager = if (!OapRuntime.isLocal(sparkEnv.conf)) {
+  override val oapRpcManager = if (!OapRuntime.isLocal(sparkEnv.conf)) {
     new OapRpcManagerMaster(oapRpcManagerMasterEndpoint)
   } else {
     new OapRpcManagerSlave(
@@ -72,18 +72,15 @@ private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime(spark
       fiberCacheManager,
       sparkEnv.conf)
   }
-  oapMetricsManager = new OapMetricsManager
+  override val oapMetricsManager = new OapMetricsManager
 
   override def stop(): Unit = {
     if (OapRuntime.isLocal(sparkEnv.conf) && memoryManager != null) {
       memoryManager.stop()
-      memoryManager = null
     }
     if (OapRuntime.isLocal(sparkEnv.conf) && fiberCacheManager != null) {
       fiberCacheManager.stop()
-      fiberCacheManager = null
     }
-    fiberSensor = null
     oapRpcManager.stop()
   }
 }
@@ -91,28 +88,27 @@ private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime(spark
 /**
  * Initializing [[FiberCacheManager]], [[MemoryManager]]
  */
-private[oap] class OapExecutorRuntime(sparkEnv: SparkEnv) extends OapRuntime(sparkEnv) {
-  memoryManager = new MemoryManager(sparkEnv)
-  fiberCacheManager = new FiberCacheManager(sparkEnv, memoryManager)
-  val oapRpcDriverEndpoint = RpcUtils.makeDriverRef(
+private[oap] class OapExecutorRuntime(sparkEnv: SparkEnv) extends OapRuntime {
+  override val memoryManager = new MemoryManager(sparkEnv)
+  override val fiberCacheManager = new FiberCacheManager(sparkEnv, memoryManager)
+  private val oapRpcDriverEndpoint = RpcUtils.makeDriverRef(
     OapRpcManagerMaster.DRIVER_ENDPOINT_NAME, sparkEnv.conf, sparkEnv.rpcEnv)
-  oapRpcManager = new OapRpcManagerSlave(
+  override val oapRpcManager = new OapRpcManagerSlave(
     sparkEnv.rpcEnv,
     oapRpcDriverEndpoint,
     sparkEnv.executorId,
     sparkEnv.blockManager,
     fiberCacheManager,
     sparkEnv.conf)
-  oapMetricsManager = new OapMetricsManager
+  override val oapMetricsManager = new OapMetricsManager
+  override val fiberSensor = throw new NotImplementedError("No fiberSensor for executor!")
 
   override def stop(): Unit = {
     if (memoryManager != null) {
       memoryManager.stop()
-      memoryManager = null
     }
     if (fiberCacheManager != null) {
       fiberCacheManager.stop()
-      fiberCacheManager = null
     }
     oapRpcManager.stop()
   }
