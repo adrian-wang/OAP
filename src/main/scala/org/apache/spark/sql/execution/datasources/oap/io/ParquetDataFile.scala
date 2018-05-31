@@ -75,7 +75,7 @@ private[oap] case class ParquetDataFile(
 
   private var context: Option[VectorizedContext] = None
   private lazy val meta =
-    OapRuntime.getOrCreate.dataFileMetaCacheManager(this).asInstanceOf[ParquetDataFileMeta]
+    OapRuntime.getOrCreate.dataFileMetaCacheManager.get(this).asInstanceOf[ParquetDataFileMeta]
   private val file = new Path(StringUtils.unEscapeString(path))
   private val parquetDataCacheEnable =
     configuration.getBoolean(OapConf.OAP_PARQUET_DATA_CACHE_ENABLED.key,
@@ -332,7 +332,7 @@ private[oap] case class ParquetDataFile(
   override def totalRows(): Long = {
     import scala.collection.JavaConverters._
     val meta =
-      OapRuntime.getOrCreate.dataFileMetaCacheManager(this).asInstanceOf[ParquetDataFileMeta]
+      OapRuntime.getOrCreate.dataFileMetaCacheManager.get(this).asInstanceOf[ParquetDataFileMeta]
     meta.footer.getBlocks.asScala.foldLeft(0L) {
       (sum, block) => sum + block.getRowCount
     }

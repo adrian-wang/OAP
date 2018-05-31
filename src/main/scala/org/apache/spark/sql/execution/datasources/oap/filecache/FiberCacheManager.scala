@@ -155,7 +155,7 @@ private[sql] class FiberCacheManager(
     // The final bit set is: 010010001
     val statusRawData = dataFibers.groupBy(_.file).map {
       case (dataFile, fiberSet) =>
-        val fileMeta: DataFileMeta = OapRuntime.getOrCreate.dataFileMetaCacheManager(dataFile)
+        val fileMeta: DataFileMeta = OapRuntime.getOrCreate.dataFileMetaCacheManager.get(dataFile)
         val fiberBitSet = new BitSet(fileMeta.getGroupCount * fileMeta.getFieldCount)
         fiberSet.foreach(fiber =>
           fiberBitSet.set(fiber.columnIndex + fileMeta.getFieldCount * fiber.rowGroupId))
@@ -211,7 +211,7 @@ private[sql] class DataFileMetaCacheManager extends Logging {
         }
       })
 
-  def apply(fiberCache: DataFile): DataFileMeta = {
+  def get(fiberCache: DataFile): DataFileMeta = {
     cache.get(fiberCache)
   }
 

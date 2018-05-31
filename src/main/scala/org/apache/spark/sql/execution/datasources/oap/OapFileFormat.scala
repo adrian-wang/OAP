@@ -259,7 +259,7 @@ private[sql] class OapFileFormat extends FileFormat
           def isSkippedByFile: Boolean = {
             if (m.dataReaderClassName == OapFileFormat.OAP_DATA_FILE_CLASSNAME) {
               val dataFile = DataFile(file.filePath, m.schema, m.dataReaderClassName, conf)
-              val dataFileMeta = OapRuntime.getOrCreate.dataFileMetaCacheManager(dataFile)
+              val dataFileMeta = OapRuntime.getOrCreate.dataFileMetaCacheManager.get(dataFile)
                   .asInstanceOf[OapDataFileMeta]
               if (filters.exists(filter => isSkippedByStatistics(
                   dataFileMeta.columnsMeta.map(_.fileStatistics).toArray, filter, m.schema))) {
