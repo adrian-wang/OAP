@@ -268,7 +268,7 @@ private[oap] case class ParquetDataFile(
     val groupId = blockMetaData.getRowGroupId
     val fiberCacheGroup = requiredColumnIds.map { id =>
       val fiberCache =
-        OapRuntime.getOrCreate.fiberCacheManager.get(DataFiber(this, id, groupId), conf)
+        OapRuntime.getOrCreate.fiberCacheManager.get(DataFiber(this, id, groupId))
       update(id, fiberCache)
       fiberCache
     }

@@ -88,7 +88,7 @@ private[index] abstract class BTreeIndexRecordReader(
     val readFunc =
       () => OapRuntime.getOrCreate.memoryManager.toIndexFiberCache(readData(offset, length))
     val fiber = BTreeFiber(readFunc, fileReader.getName, sectionId, idx)
-    OapRuntime.getOrCreate.fiberCacheManager.get(fiber, configuration)
+    OapRuntime.getOrCreate.fiberCacheManager.get(fiber)
   }
 
   protected def getLongFromBuffer(buffer: Array[Byte], offset: Int): Long =
@@ -378,7 +378,7 @@ private[index] object BTreeIndexRecordReader {
 
     val fileReader = IndexFileReaderImpl(configuration, indexPath)
 
-    readVersion(fileReader) match {
+    IndexUtils.readVersion(fileReader) match {
       case Some(version) =>
         IndexVersion(version) match {
           case IndexVersion.OAP_INDEX_V1 =>
@@ -389,11 +389,6 @@ private[index] object BTreeIndexRecordReader {
       case None =>
         throw new OapException("not a valid index file")
     }
-  }
-
-  private def readVersion(fileReader: IndexFileReader): Option[Int] = {
-    val magicBytes = fileReader.read(0, IndexFile.VERSION_LENGTH)
-    IndexUtils.deserializeVersion(magicBytes)
   }
 }
 
